@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dungeon Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #d5dbe3; overflow: hidden; font-family: monospace; }
+    canvas { display: block; }
+
+    #hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      color: #2a2a2a;
+      font-size: 14px;
+      line-height: 1.6;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #hud .title { font-size: 20px; color: #111; margin-bottom: 4px; }
+    #hud .coord { color: #e63946; }
+
+    #log {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      color: #444;
+      font-size: 13px;
+      line-height: 1.5;
+      pointer-events: none;
+      z-index: 10;
+      max-height: 100px;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div class="title">Dungeon Demo</div>
+    <div>Floor <span id="floor-num">1 / 99</span></div>
+    <div>Position <span class="coord" id="player-pos">0,0</span></div>
+    <div id="shield-indicator" style="color:#ffd166;opacity:0">◈ Shield active</div>
+  </div>
+  <div id="log"></div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
