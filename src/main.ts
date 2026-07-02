@@ -243,6 +243,9 @@ function handleInput() {
     keys.delete(k);
   }
 
+  // Proximity hint — warn when close to exit
+  const distToExit = Math.abs(action.x - dungeon.exitX) + Math.abs(action.y - dungeon.exitY);
+
   addLog(`▌ Move to (${action.x}, ${action.y}) — ${describeTile(action.tileType, action.label)}`);
 
   // Reveal fog around new position + true tile color
@@ -303,6 +306,16 @@ function handleInput() {
     addLog('▌ Gained a shield! Next hazard will be blocked.');
   }
 
+  // Proximity hint after move (not on exit tile)
+  if (action.tileType !== TileType.Exit && distToExit <= 2) {
+    const msgs = [
+      '▌ You feel a warm breeze... the exit is near.',
+      '▌ A faint glow emanates from nearby.',
+      '▌ The air feels different here. The exit is close.',
+    ];
+    addLog(msgs[Math.floor(Math.random() * msgs.length)]);
+  }
+
   updateHUD();
 }
 
@@ -344,6 +357,9 @@ function regenerateDungeon() {
 
   // Reset player position
   player.resetPosition(0, 0);
+
+  // Spawn new exit beacon
+  spawnExitBeacon();
 
   // Reveal starting area (fog + tile color)
   revealAround(fogData.meshes, dungeon, 0, 0, REVEAL_RADIUS);
@@ -396,6 +412,25 @@ function animate() {
 
     controls.update();
 
+    // Animate exit beacon
+    if (exitBeacon && !gameWon) {
+      const t = clock.elapsedTime;
+      exitBeacon.children.forEach((child, i) => {
+        if (child.userData.angle !== undefined) {
+          const a = child.userData.angle + t * child.userData.speed;
+          child.position.x = Math.cos(a) * child.userData.radius;
+          child.position.z = Math.sin(a) * child.userData.radius;
+          child.position.y = Math.sin(t * 2 + i) * 0.12 + 0.15;
+        }
+      });
+      exitBeacon.rotation.y += dt * 0.6;
+    }
+
+    // Pulse start ring
+    const s = 1 + Math.sin(clock.elapsedTime * 1.8) * 0.15;
+    startRing.scale.setScalar(s);
+    (startRing.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.3 + Math.sin(clock.elapsedTime * 1.8) * 0.3;
+
     // Subtle particle drift
     particles.rotation.y += dt * 0.05;
     particles.position.y += Math.sin(clock.elapsedTime * 0.3) * dt * 0.3;
@@ -413,10 +448,59 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
+// ── Start overlay ────────────────────────────────────────────
+const overlay = document.getElementById('overlay')!;
+
+function dismissOverlay() {
+  overlay.classList.add('hidden');
+  setTimeout(() => overlay.remove(), 500);
+}
+overlay.addEventListener('click', dismissOverlay);
+window.addEventListener('keydown', dismissOverlay, { once: true });
+
+// ── Exit beacon ───────────────────────────────────────────────
+let exitBeacon: THREE.Group | null = null;
+
+function createExitBeacon(x: number, y: number): THREE.Group {
+  const group = new THREE.Group();
+  const ringGeo = new THREE.TorusGeometry(0.25, 0.04, 16, 32);
+  const ringMat = new THREE.MeshStandardMaterial({ color: 0x06d6a0, emissive: 0x06d6a0, emissiveIntensity: 0.8 });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.2;
+  group.add(ring);
+
+  // Floating dots
+  const dotGeo = new THREE.SphereGeometry(0.06, 8, 8);
+  const dotMat = new THREE.MeshStandardMaterial({ color: 0x06d6a0, emissive: 0x06d6a0, emissiveIntensity: 1 });
+  for (let i = 0; i < 6; i++) {
+    const dot = new THREE.Mesh(dotGeo, dotMat);
+    dot.userData = { angle: (i / 6) * Math.PI * 2, speed: 0.8 + Math.random() * 0.5, radius: 0.3 + Math.random() * 0.2 };
+    group.add(dot);
+  }
+
+  group.position.copy(tileToWorld(x, y));
+  group.position.y = 0.15;
+  return group;
+}
+
+function spawnExitBeacon() {
+  if (exitBeacon) scene.remove(exitBeacon);
+  exitBeacon = createExitBeacon(dungeon.exitX, dungeon.exitY);
+  scene.add(exitBeacon);
+}
+
+// ── Start marker (pulsing ring at origin) ─────────────────────
+const startRingGeo = new THREE.TorusGeometry(0.5, 0.05, 16, 32);
+const startRingMat = new THREE.MeshStandardMaterial({ color: 0x118ab2, emissive: 0x118ab2, emissiveIntensity: 0.5 });
+const startRing = new THREE.Mesh(startRingGeo, startRingMat);
+startRing.rotation.x = -Math.PI / 2;
+startRing.position.set(0, 0.18, 0);
+scene.add(startRing);
+
 // ── Start ────────────────────────────────────────────────────
+spawnExitBeacon();
 revealAround(fogData.meshes, dungeon, 0, 0, REVEAL_RADIUS);
 revealTile(dungeon, dungeonMeshes, 0, 0);
 updateHUD();
-addLog('▌ WASD / Arrows to move. Scroll to zoom, right-drag to orbit.');
-addLog(`▌ Reach floor ${MAX_FLOOR} to escape. Good luck.`);
 animate();

@@ -35,9 +35,97 @@
       max-height: 100px;
       overflow: hidden;
     }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 10, 20, 0.88);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      cursor: pointer;
+      transition: opacity 0.4s;
+    }
+    #overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #overlay-card {
+      background: #1e1e2e;
+      border: 1px solid #3d405b;
+      border-radius: 12px;
+      padding: 28px 32px;
+      max-width: 420px;
+      width: 90%;
+      color: #cdd6f4;
+      font-family: monospace;
+      cursor: default;
+    }
+    #overlay-card h1 {
+      font-size: 26px;
+      color: #06d6a0;
+      margin-bottom: 6px;
+    }
+    #overlay-card .subtitle {
+      color: #a6adc8;
+      font-size: 13px;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    #overlay-card h3 {
+      font-size: 14px;
+      color: #f4a261;
+      margin: 14px 0 6px;
+    }
+    #overlay-card p {
+      font-size: 13px;
+      line-height: 1.7;
+      margin: 0;
+    }
+    #overlay-card .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      font-size: 12px;
+      line-height: 1.8;
+    }
+    #overlay-card .dismiss {
+      margin-top: 18px;
+      text-align: center;
+      color: #6c7086;
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
+  <div id="overlay">
+    <div id="overlay-card">
+      <h1>Gridmaze</h1>
+      <div class="subtitle">Escape the dungeon!<br>Reach the <span style="color:#06d6a0">Exit ▨</span> on each floor to descend.<br>Clear all <b>99 floors</b> to win.</div>
+
+      <h3>▸ Controls</h3>
+      <p><b>WASD</b> / <b>Arrow Keys</b> — Move one tile<br>
+         <b>Scroll</b> — Zoom · <b>Right-drag</b> — Rotate view<br>
+         <b>Swipe</b> on mobile to move</p>
+
+      <h3>▸ Tile Types</h3>
+      <div class="legend">
+        <span style="color:#06d6a0">▨ Exit</span>
+        <span style="color:#eeeeee">□ Empty</span>
+        <span style="color:#1a1a2e">■ Wall</span>
+        <span style="color:#457b9d">↺ Reset</span>
+        <span style="color:#9b5de5">↗ Teleport</span>
+        <span style="color:#e63946">? Random</span>
+        <span style="color:#f4a261">⌖ Compass</span>
+        <span style="color:#00bbf9">◎ Scan</span>
+        <span style="color:#ffd166">◈ Shield</span>
+      </div>
+
+      <div class="dismiss">Click anywhere to begin</div>
+    </div>
+  </div>
+
   <div id="hud">
     <div class="title">Gridmaze</div>
     <div>Floor <span id="floor-num">1 / 99</span></div>
