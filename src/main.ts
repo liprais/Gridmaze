@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TileType } from './types';
 import { generateDungeon, createDungeonMesh, createFogOverlay, revealAround, revealTile, getTileAt, tileToWorld } from './dungeon';
 import type { DungeonMeshes } from './dungeon';
-import { Player } from './player';
+import { Player, PLAYER_Y } from './player';
 
 // ── Scene setup ──────────────────────────────────────────────
 const scene = new THREE.Scene();
@@ -76,6 +76,13 @@ const REVEAL_RADIUS = 1;
 const MAX_FLOOR = 99;
 let floorNum = 1;
 let gameWon = false;
+
+// ── Animation state ──────────────────────────────────────────
+let shakeTimer = 0;        // screen shake (RandomMap)
+let flashTimer = 0;        // white flash (Exit)
+let playerAnim: 'none' | 'shrink' | 'grow' = 'none';
+let playerAnimTarget = new THREE.Vector3();
+let playerScaleVel = 0;
 let dungeon = generateDungeon(DUNGEON_SIZE, DUNGEON_SIZE, floorNum);
 let dungeonMeshes = createDungeonMesh(dungeon);
 let fogData = createFogOverlay(dungeon);
@@ -201,7 +208,7 @@ const _camDir = new THREE.Vector3();
 const _camRight = new THREE.Vector3();
 
 function handleInput() {
-  if (player.isMoving || gameWon) return;
+  if (player.isMoving || gameWon || playerAnim !== 'none') return;
 
   let inputX = 0, inputY = 0;
   if (keys.has('w') || keys.has('arrowup'))    inputY += 1;
@@ -254,6 +261,7 @@ function handleInput() {
 
   // Handle tile effects
   if (action.tileType === TileType.Exit) {
+    flashTimer = 0.3;
     if (floorNum >= MAX_FLOOR) {
       gameWon = true;
       addLog('▌ You escaped the dungeon!');
@@ -268,9 +276,9 @@ function handleInput() {
     player.setShield(false);
     addLog('▌ Shield absorbed the effect!');
   } else if (action.tileType === TileType.Reset) {
-    player.resetPosition(0, 0);
-    revealAround(fogData.meshes, dungeon, dungeonMeshes,0, 0, REVEAL_RADIUS);
-    revealTile(dungeon, dungeonMeshes, 0, 0);
+    // Shrink → teleport to start → grow
+    playerAnim = 'shrink';
+    playerAnimTarget.set(0, PLAYER_Y, 0);
     addLog('▌ Sent back to start!');
   } else if (action.tileType === TileType.Teleport) {
     let tx: number, ty: number;
@@ -278,11 +286,14 @@ function handleInput() {
       tx = Math.floor(Math.random() * DUNGEON_SIZE);
       ty = Math.floor(Math.random() * DUNGEON_SIZE);
     } while (getTileAt(dungeon, tx, ty)?.type === TileType.Wall);
-    player.resetPosition(tx, ty);
-    revealAround(fogData.meshes, dungeon, dungeonMeshes,tx, ty, REVEAL_RADIUS);
-    revealTile(dungeon, dungeonMeshes, tx, ty);
+    const tp = tileToWorld(tx, ty);
+    playerAnim = 'shrink';
+    playerAnimTarget.set(tp.x, PLAYER_Y, tp.z);
+    // Deferred: reveal + reset after shrink completes (in animate)
+    (player.mesh as any).__teleportTarget = { tx, ty };
     addLog(`▌ Teleported to (${tx}, ${ty})!`);
   } else if (action.tileType === TileType.RandomMap) {
+    shakeTimer = 0.35;
     regenerateDungeon();
     addLog('▌ The dungeon shifts around you...');
   } else if (action.tileType === TileType.Compass) {
@@ -302,6 +313,7 @@ function handleInput() {
     addLog('▌ All tile types revealed!');
   } else if (action.tileType === TileType.Shield) {
     player.setShield(true);
+    playerScaleVel = 0.3; // brief pulse
     addLog('▌ Gained a shield! Next hazard will be blocked.');
   }
 
@@ -436,6 +448,73 @@ function animate() {
 
     // Fade in fog from edges — intensify as you go deeper
     (scene.fog as THREE.FogExp2).density = 0.012 + floorNum * 0.003;
+
+    // ── Effect animations ──────────────────────────────────
+    // Screen shake
+    if (shakeTimer > 0) {
+      shakeTimer -= dt;
+      const intensity = (shakeTimer / 0.35) * 0.2;
+      camera.position.x += (Math.random() - 0.5) * intensity;
+      camera.position.z += (Math.random() - 0.5) * intensity;
+    }
+
+    // White flash
+    if (flashTimer > 0) {
+      flashTimer -= dt;
+      const a = (flashTimer / 0.3);
+      scene.background = new THREE.Color().lerpColors(
+        new THREE.Color(0xd5dbe3),
+        new THREE.Color(0xffffff),
+        a,
+      );
+    }
+
+    // Player shrink/grow animation
+    if (playerAnim === 'shrink') {
+      const s = player.mesh.scale.x - dt * 6;
+      if (s <= 0.05) {
+        player.mesh.scale.setScalar(0);
+        // Execute the actual reposition
+        const tp = (player.mesh as any).__teleportTarget;
+        if (tp) {
+          player.resetPosition(tp.tx, tp.ty);
+          revealAround(fogData.meshes, dungeon, dungeonMeshes, tp.tx, tp.ty, REVEAL_RADIUS);
+          revealTile(dungeon, dungeonMeshes, tp.tx, tp.ty);
+          delete (player.mesh as any).__teleportTarget;
+        } else {
+          // Reset tile: go to start
+          player.resetPosition(0, 0);
+          revealAround(fogData.meshes, dungeon, dungeonMeshes, 0, 0, REVEAL_RADIUS);
+          revealTile(dungeon, dungeonMeshes, 0, 0);
+        }
+        playerAnim = 'grow';
+        updateHUD();
+      } else {
+        player.mesh.scale.setScalar(s);
+      }
+    } else if (playerAnim === 'grow') {
+      const s = player.mesh.scale.x + dt * 5;
+      if (s >= 1) {
+        player.mesh.scale.setScalar(1);
+        playerAnim = 'none';
+      } else {
+        player.mesh.scale.setScalar(s);
+      }
+    }
+
+    // Shield pulse
+    if (playerScaleVel !== 0) {
+      const s = player.mesh.scale.x + playerScaleVel;
+      if (s >= 1.25) {
+        playerScaleVel = -Math.abs(playerScaleVel) * 0.5;
+      } else if (s <= 1) {
+        player.mesh.scale.setScalar(1);
+        playerScaleVel = 0;
+      } else {
+        player.mesh.scale.setScalar(s);
+        playerScaleVel *= 0.92;
+      }
+    }
 
     renderer.render(scene, camera);
   } catch (err) {

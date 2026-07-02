@@ -229,6 +229,34 @@ export function createDungeonMesh(dungeon: DungeonData): DungeonMeshes {
   return { group, tiles: meshes, labels: labelGroup, labelSprites: sprites };
 }
 
+/** Shared helper: create a label sprite with dark background circle for contrast */
+function createLabelSprite(label: string, x: number, y: number): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+
+  // Dark background circle for visibility on grey tiles
+  ctx.beginPath();
+  ctx.arc(64, 64, 42, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(10, 10, 20, 0.6)';
+  ctx.fill();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 52px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, 64, 64);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.position.set(x * TILE_SIZE, 0.4, y * TILE_SIZE);
+  sprite.scale.set(0.85, 0.85, 1);
+  return sprite;
+}
+
 function buildLabels(dungeon: DungeonData): { group: THREE.Group; sprites: (THREE.Sprite | null)[][] } {
   const group = new THREE.Group();
   const sprites: (THREE.Sprite | null)[][] = [];
@@ -237,29 +265,12 @@ function buildLabels(dungeon: DungeonData): { group: THREE.Group; sprites: (THRE
     const row: (THREE.Sprite | null)[] = [];
     for (let x = 0; x < dungeon.width; x++) {
       const tile = dungeon.tiles[y][x];
-      // Only show labels for tiles the player has stepped on (or Start)
       if (!tile.label || !(tile.steppedOn || tile.type === TileType.Start)) {
         row.push(null);
         continue;
       }
 
-      const canvas = document.createElement('canvas');
-      canvas.width = 128;
-      canvas.height = 128;
-      const ctx = canvas.getContext('2d')!;
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 48px monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(tile.label, 64, 64);
-
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.minFilter = THREE.LinearFilter;
-      const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
-      const sprite = new THREE.Sprite(spriteMat);
-      sprite.position.set(x * TILE_SIZE, 0.35, y * TILE_SIZE);
-      sprite.scale.set(0.6, 0.6, 1);
-
+      const sprite = createLabelSprite(tile.label, x, y);
       group.add(sprite);
       row.push(sprite);
     }
@@ -286,23 +297,7 @@ export function revealTile(
 
   // Add label sprite if there is one
   if (tile.label && !meshes.labelSprites[y][x]) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 48px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(tile.label, 64, 64);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.minFilter = THREE.LinearFilter;
-    const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
-    const sprite = new THREE.Sprite(spriteMat);
-    sprite.position.set(x * TILE_SIZE, 0.35, y * TILE_SIZE);
-    sprite.scale.set(0.6, 0.6, 1);
-
+    const sprite = createLabelSprite(tile.label, x, y);
     meshes.labels.add(sprite);
     meshes.labelSprites[y][x] = sprite;
   }
@@ -351,23 +346,7 @@ export function showLabel(
   if (!tile.label) return;
   if (meshes.labelSprites[y][x]) return;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 128;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 48px monospace';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(tile.label, 64, 64);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.LinearFilter;
-  const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
-  const sprite = new THREE.Sprite(spriteMat);
-  sprite.position.set(x * TILE_SIZE, 0.35, y * TILE_SIZE);
-  sprite.scale.set(0.6, 0.6, 1);
-
+  const sprite = createLabelSprite(tile.label, x, y);
   meshes.labels.add(sprite);
   meshes.labelSprites[y][x] = sprite;
 }

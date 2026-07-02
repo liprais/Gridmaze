@@ -3,7 +3,7 @@ import { PlayerState, TileType, DungeonData } from './types';
 import { tileToWorld, getTileAt } from './dungeon';
 
 const MOVE_SPEED = 0.08; // units per frame
-const PLAYER_Y = 0.35;
+export const PLAYER_Y = 0.35;
 
 export class Player {
   public mesh: THREE.Mesh;

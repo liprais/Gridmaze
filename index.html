@@ -86,9 +86,22 @@
     #overlay-card .legend {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px 14px;
-      font-size: 12px;
-      line-height: 1.8;
+      gap: 6px 16px;
+      font-size: 13px;
+      line-height: 2;
+    }
+    #overlay-card .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    #overlay-card .legend .swatch {
+      display: inline-block;
+      width: 13px;
+      height: 13px;
+      border-radius: 2px;
+      border: 1px solid rgba(255,255,255,0.2);
+      flex-shrink: 0;
     }
     #overlay-card .dismiss {
       margin-top: 18px;
@@ -101,34 +114,40 @@
       position: fixed;
       top: 16px;
       right: 16px;
-      color: #2a2a2a;
-      font-size: 11px;
-      line-height: 1.5;
+      color: #1a1a1a;
+      font-size: 13px;
+      line-height: 1.7;
       pointer-events: none;
       z-index: 10;
-      background: rgba(213, 219, 227, 0.85);
-      padding: 8px 10px;
-      border-radius: 6px;
-      max-width: 160px;
+      background: rgba(240, 240, 245, 0.9);
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(0,0,0,0.08);
+      min-width: 170px;
     }
     #legend .legend-title {
-      font-size: 12px;
+      font-size: 14px;
+      font-weight: bold;
       color: #111;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
     #legend .legend-row {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 6px;
       white-space: nowrap;
     }
-    #legend .legend-symbol {
-      width: 18px;
-      text-align: center;
-      font-weight: bold;
+    #legend .legend-swatch {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      border: 1px solid rgba(0,0,0,0.2);
     }
     #legend .legend-effect {
       color: #666;
+      font-size: 11px;
     }
   </style>
 </head>
@@ -145,15 +164,15 @@
 
       <h3>▸ Tile Types</h3>
       <div class="legend">
-        <span style="color:#06d6a0">▨ Exit</span>
-        <span style="color:#eeeeee">□ Empty</span>
-        <span style="color:#1a1a2e">■ Wall</span>
-        <span style="color:#457b9d">↺ Reset</span>
-        <span style="color:#9b5de5">↗ Teleport</span>
-        <span style="color:#e63946">? Random</span>
-        <span style="color:#f4a261">⌖ Compass</span>
-        <span style="color:#00bbf9">◎ Scan</span>
-        <span style="color:#ffd166">◈ Shield</span>
+        <span><span class="swatch" style="background:#06d6a0"></span> Exit</span>
+        <span><span class="swatch" style="background:#eeeeee"></span> Empty</span>
+        <span><span class="swatch" style="background:#1a1a2e"></span> Wall</span>
+        <span><span class="swatch" style="background:#457b9d"></span> ↺ Reset</span>
+        <span><span class="swatch" style="background:#9b5de5"></span> ↗ Teleport</span>
+        <span><span class="swatch" style="background:#e63946"></span> ? Random</span>
+        <span><span class="swatch" style="background:#f4a261"></span> ⌖ Compass</span>
+        <span><span class="swatch" style="background:#00bbf9"></span> ◎ Scan</span>
+        <span><span class="swatch" style="background:#ffd166"></span> ◈ Shield</span>
       </div>
 
       <div class="dismiss">Click anywhere to begin</div>
@@ -169,14 +188,15 @@
 
   <div id="legend">
     <div class="legend-title">Tile Types</div>
-    <div class="legend-row"><span class="legend-symbol" style="color:#06d6a0">▨</span> Exit</div>
-    <div class="legend-row"><span class="legend-symbol" style="color:#1a1a2e">■</span> Wall</div>
-    <div class="legend-row"><span class="legend-symbol" style="color:#457b9d">↺</span> Reset <span class="legend-effect">→start</span></div>
-    <div class="legend-row"><span class="legend-symbol" style="color:#9b5de5">↗</span> Teleport</div>
-    <div class="legend-row"><span class="legend-symbol" style="color:#e63946">?</span> Random <span class="legend-effect">reshuffle</span></div>
-    <div class="legend-row"><span class="legend-symbol" style="color:#f4a261">⌖</span> Compass <span class="legend-effect">→exit</span></div>
-    <div class="legend-row"><span class="legend-symbol" style="color:#00bbf9">◎</span> Scan <span class="legend-effect">reveal all</span></div>
-    <div class="legend-row"><span class="legend-symbol" style="color:#ffd166">◈</span> Shield <span class="legend-effect">block 1</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#06d6a0"></span> Exit</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#eeeeee"></span> Empty</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#1a1a2e"></span> Wall</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#457b9d"></span> ↺ Reset <span class="legend-effect">→start</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#9b5de5"></span> ↗ Teleport</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#e63946"></span> ? Random <span class="legend-effect">reshuffle</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#f4a261"></span> ⌖ Compass <span class="legend-effect">→exit</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#00bbf9"></span> ◎ Scan <span class="legend-effect">reveal all</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#ffd166"></span> ◈ Shield <span class="legend-effect">block 1</span></div>
   </div>
 
   <div id="log"></div>
