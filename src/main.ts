@@ -80,6 +80,7 @@ let gameWon = false;
 // ── Animation state ──────────────────────────────────────────
 let shakeTimer = 0;        // screen shake (RandomMap)
 let flashTimer = 0;        // white flash (Exit)
+let shieldBreakTimer = 0;  // yellow flash + pulse (shield absorb)
 let playerAnim: 'none' | 'shrink' | 'grow' = 'none';
 let playerAnimTarget = new THREE.Vector3();
 let playerScaleVel = 0;
@@ -274,6 +275,7 @@ function handleInput() {
   } else if (player.hasShield && isHazardType(action.tileType)) {
     // Shield absorbs one hazard
     player.setShield(false);
+    shieldBreakTimer = 0.4;
     addLog('▌ Shield absorbed the effect!');
   } else if (action.tileType === TileType.Reset) {
     // Shrink → teleport to start → grow
@@ -304,13 +306,15 @@ function handleInput() {
     revealTile(dungeon, dungeonMeshes, ex, ey);
     addLog(`▌ Exit located at (${ex}, ${ey})!`);
   } else if (action.tileType === TileType.Scan) {
-    // Reveal true colors for the entire floor (fog stays)
-    for (let sy = 0; sy < DUNGEON_SIZE; sy++) {
-      for (let sx = 0; sx < DUNGEON_SIZE; sx++) {
-        revealTile(dungeon, dungeonMeshes, sx, sy);
+    // Reveal true colors in 3×3 area around player
+    for (let sy = action.y - REVEAL_RADIUS; sy <= action.y + REVEAL_RADIUS; sy++) {
+      for (let sx = action.x - REVEAL_RADIUS; sx <= action.x + REVEAL_RADIUS; sx++) {
+        if (sx >= 0 && sy >= 0 && sx < DUNGEON_SIZE && sy < DUNGEON_SIZE) {
+          revealTile(dungeon, dungeonMeshes, sx, sy);
+        }
       }
     }
-    addLog('▌ All tile types revealed!');
+    addLog('▌ Scanned nearby area!');
   } else if (action.tileType === TileType.Shield) {
     player.setShield(true);
     playerScaleVel = 0.3; // brief pulse
@@ -458,7 +462,7 @@ function animate() {
       camera.position.z += (Math.random() - 0.5) * intensity;
     }
 
-    // White flash
+    // White flash (Exit)
     if (flashTimer > 0) {
       flashTimer -= dt;
       const a = (flashTimer / 0.3);
@@ -467,6 +471,20 @@ function animate() {
         new THREE.Color(0xffffff),
         a,
       );
+    }
+
+    // Shield break flash (amber)
+    if (shieldBreakTimer > 0) {
+      shieldBreakTimer -= dt;
+      const a = Math.min(shieldBreakTimer / 0.2, 1);
+      scene.background = new THREE.Color().lerpColors(
+        new THREE.Color(0xd5dbe3),
+        new THREE.Color(0xffd166),
+        a,
+      );
+      // Pulse player scale
+      const pulse = 1 + Math.sin((0.4 - shieldBreakTimer) * 20) * 0.2 * a;
+      player.mesh.scale.setScalar(pulse);
     }
 
     // Player shrink/grow animation

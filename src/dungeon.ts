@@ -368,13 +368,10 @@ export function revealAround(
       fogMeshes[y][x].visible = false;
 
       const tile = dungeon.tiles[y][x];
-      // Walls: show immediately since you can't step on them
-      if (tile.type === TileType.Wall) {
-        (meshes.tiles[y][x].material as THREE.MeshStandardMaterial).color.set(COLORS[TileType.Wall]);
-      }
-      // Show label symbol so player knows what to expect
-      if (tile.label) {
-        showLabel(dungeon, meshes, x, y);
+      // Walls & Exit: show immediately so player knows terrain and goal
+      if (tile.type === TileType.Wall || tile.type === TileType.Exit) {
+        (meshes.tiles[y][x].material as THREE.MeshStandardMaterial).color.set(COLORS[tile.type]);
+        if (tile.label) showLabel(dungeon, meshes, x, y);
       }
 
       count++;
