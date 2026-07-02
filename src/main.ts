@@ -249,7 +249,7 @@ function handleInput() {
   addLog(`▌ Move to (${action.x}, ${action.y}) — ${describeTile(action.tileType, action.label)}`);
 
   // Reveal fog around new position + true tile color
-  revealAround(fogData.meshes, dungeon, action.x, action.y, REVEAL_RADIUS);
+  revealAround(fogData.meshes, dungeon, dungeonMeshes,action.x, action.y, REVEAL_RADIUS);
   revealTile(dungeon, dungeonMeshes, action.x, action.y);
 
   // Handle tile effects
@@ -269,7 +269,7 @@ function handleInput() {
     addLog('▌ Shield absorbed the effect!');
   } else if (action.tileType === TileType.Reset) {
     player.resetPosition(0, 0);
-    revealAround(fogData.meshes, dungeon, 0, 0, REVEAL_RADIUS);
+    revealAround(fogData.meshes, dungeon, dungeonMeshes,0, 0, REVEAL_RADIUS);
     revealTile(dungeon, dungeonMeshes, 0, 0);
     addLog('▌ Sent back to start!');
   } else if (action.tileType === TileType.Teleport) {
@@ -279,7 +279,7 @@ function handleInput() {
       ty = Math.floor(Math.random() * DUNGEON_SIZE);
     } while (getTileAt(dungeon, tx, ty)?.type === TileType.Wall);
     player.resetPosition(tx, ty);
-    revealAround(fogData.meshes, dungeon, tx, ty, REVEAL_RADIUS);
+    revealAround(fogData.meshes, dungeon, dungeonMeshes,tx, ty, REVEAL_RADIUS);
     revealTile(dungeon, dungeonMeshes, tx, ty);
     addLog(`▌ Teleported to (${tx}, ${ty})!`);
   } else if (action.tileType === TileType.RandomMap) {
@@ -361,7 +361,7 @@ function regenerateDungeon() {
   spawnExitBeacon();
 
   // Reveal starting area (fog + tile color)
-  revealAround(fogData.meshes, dungeon, 0, 0, REVEAL_RADIUS);
+  revealAround(fogData.meshes, dungeon, dungeonMeshes,0, 0, REVEAL_RADIUS);
   revealTile(dungeon, dungeonMeshes, 0, 0);
 
   updateHUD();
@@ -499,7 +499,7 @@ scene.add(startRing);
 
 // ── Start ────────────────────────────────────────────────────
 spawnExitBeacon();
-revealAround(fogData.meshes, dungeon, 0, 0, REVEAL_RADIUS);
+revealAround(fogData.meshes, dungeon, dungeonMeshes,0, 0, REVEAL_RADIUS);
 revealTile(dungeon, dungeonMeshes, 0, 0);
 updateHUD();
 animate();

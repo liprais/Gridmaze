@@ -340,9 +340,42 @@ export function createFogOverlay(dungeon: DungeonData): {
   return { group, meshes };
 }
 
+/** Show only the label sprite (no color change, no steppedOn flag) */
+export function showLabel(
+  dungeon: DungeonData,
+  meshes: DungeonMeshes,
+  x: number,
+  y: number,
+): void {
+  const tile = dungeon.tiles[y][x];
+  if (!tile.label) return;
+  if (meshes.labelSprites[y][x]) return;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 48px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(tile.label, 64, 64);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.position.set(x * TILE_SIZE, 0.35, y * TILE_SIZE);
+  sprite.scale.set(0.6, 0.6, 1);
+
+  meshes.labels.add(sprite);
+  meshes.labelSprites[y][x] = sprite;
+}
+
 export function revealAround(
   fogMeshes: THREE.Mesh[][],
   dungeon: DungeonData,
+  meshes: DungeonMeshes,
   cx: number,
   cy: number,
   radius: number,
@@ -354,6 +387,17 @@ export function revealAround(
       if (dungeon.tiles[y][x].explored) continue;
       dungeon.tiles[y][x].explored = true;
       fogMeshes[y][x].visible = false;
+
+      const tile = dungeon.tiles[y][x];
+      // Walls: show immediately since you can't step on them
+      if (tile.type === TileType.Wall) {
+        (meshes.tiles[y][x].material as THREE.MeshStandardMaterial).color.set(COLORS[TileType.Wall]);
+      }
+      // Show label symbol so player knows what to expect
+      if (tile.label) {
+        showLabel(dungeon, meshes, x, y);
+      }
+
       count++;
     }
   }

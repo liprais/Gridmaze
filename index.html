@@ -96,6 +96,40 @@
       color: #6c7086;
       font-size: 12px;
     }
+
+    #legend {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      color: #2a2a2a;
+      font-size: 11px;
+      line-height: 1.5;
+      pointer-events: none;
+      z-index: 10;
+      background: rgba(213, 219, 227, 0.85);
+      padding: 8px 10px;
+      border-radius: 6px;
+      max-width: 160px;
+    }
+    #legend .legend-title {
+      font-size: 12px;
+      color: #111;
+      margin-bottom: 4px;
+    }
+    #legend .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+    #legend .legend-symbol {
+      width: 18px;
+      text-align: center;
+      font-weight: bold;
+    }
+    #legend .legend-effect {
+      color: #666;
+    }
   </style>
 </head>
 <body>
@@ -132,6 +166,19 @@
     <div>Position <span class="coord" id="player-pos">0,0</span></div>
     <div id="shield-indicator" style="color:#ffd166;opacity:0">◈ Shield active</div>
   </div>
+
+  <div id="legend">
+    <div class="legend-title">Tile Types</div>
+    <div class="legend-row"><span class="legend-symbol" style="color:#06d6a0">▨</span> Exit</div>
+    <div class="legend-row"><span class="legend-symbol" style="color:#1a1a2e">■</span> Wall</div>
+    <div class="legend-row"><span class="legend-symbol" style="color:#457b9d">↺</span> Reset <span class="legend-effect">→start</span></div>
+    <div class="legend-row"><span class="legend-symbol" style="color:#9b5de5">↗</span> Teleport</div>
+    <div class="legend-row"><span class="legend-symbol" style="color:#e63946">?</span> Random <span class="legend-effect">reshuffle</span></div>
+    <div class="legend-row"><span class="legend-symbol" style="color:#f4a261">⌖</span> Compass <span class="legend-effect">→exit</span></div>
+    <div class="legend-row"><span class="legend-symbol" style="color:#00bbf9">◎</span> Scan <span class="legend-effect">reveal all</span></div>
+    <div class="legend-row"><span class="legend-symbol" style="color:#ffd166">◈</span> Shield <span class="legend-effect">block 1</span></div>
+  </div>
+
   <div id="log"></div>
 
   <script type="module" src="/src/main.ts"></script>
