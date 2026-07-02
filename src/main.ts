@@ -283,7 +283,6 @@ function handleInput() {
     revealTile(dungeon, dungeonMeshes, tx, ty);
     addLog(`▌ Teleported to (${tx}, ${ty})!`);
   } else if (action.tileType === TileType.RandomMap) {
-    floorNum++;
     regenerateDungeon();
     addLog('▌ The dungeon shifts around you...');
   } else if (action.tileType === TileType.Compass) {
