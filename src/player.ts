@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { PlayerState, TileType, DungeonData } from './types';
-import { tileToWorld, getTileAt } from './dungeon';
+import { PlayerState } from './types';
+import { tileToWorld } from './dungeon';
 
 const MOVE_SPEED = 0.08; // units per frame
 export const PLAYER_Y = 0.35;
@@ -52,29 +52,13 @@ export class Player {
     this.moving = false;
   }
 
-  /** Try to move one tile in the given direction. Returns an event description, or null if blocked. */
-  attemptMove(dx: number, dy: number, dungeon: DungeonData): PlayerAction | null {
-    if (this.moving) return null;
-
-    const nx = this.state.x + dx;
-    const ny = this.state.y + dy;
-    const tile = getTileAt(dungeon, nx, ny);
-
-    if (!tile) return null;
-    if (tile.type === TileType.Wall) return null;
-
-    this.state.x = nx;
-    this.state.y = ny;
-    this.targetPos = tileToWorld(nx, ny);
+  /** Move to the given tile coordinates. No validation — the engine handles that. */
+  moveTo(x: number, y: number) {
+    this.state.x = x;
+    this.state.y = y;
+    this.targetPos = tileToWorld(x, y);
     this.targetPos.y = PLAYER_Y;
     this.moving = true;
-
-    return {
-      tileType: tile.type,
-      label: tile.label,
-      x: nx,
-      y: ny,
-    };
   }
 
   update() {
@@ -90,11 +74,4 @@ export class Player {
     const dir = this.targetPos.clone().sub(this.mesh.position).normalize();
     this.mesh.position.add(dir.multiplyScalar(MOVE_SPEED));
   }
-}
-
-export interface PlayerAction {
-  tileType: TileType;
-  label: string;
-  x: number;
-  y: number;
 }

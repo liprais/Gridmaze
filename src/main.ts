@@ -1,38 +1,46 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TileType } from './types';
-import { generateDungeon, createDungeonMesh, createFogOverlay, revealAround, revealTile, getTileAt, tileToWorld } from './dungeon';
+import { createDungeonMesh, createFogOverlay, revealAround, revealTile, tileToWorld, disposeDungeonMeshes, disposeFogOverlay, rebuildAllLabels } from './dungeon';
 import type { DungeonMeshes } from './dungeon';
 import { Player, PLAYER_Y } from './player';
-import { init as initI18n, setLang, getLang, t, getTileName, getProximityMessage } from './i18n';
+import { init as initI18n, setLang, getLang, t, getTileName, getProximityMessage, refreshTileLabels } from './i18n';
+import { CONFIG } from './game/config';
+import { createRNG } from './game/rng';
+import { createInitialState, processMove } from './game/engine';
+import type { EngineState, GameEvent } from './game/engine';
+
+// ── i18n — must init before any dungeon generation (labels depend on language) ─
+initI18n();
+
+// ── RNG — seedable for reproducibility ─────────────────────────────
+const rng = createRNG(Date.now());
 
 // ── Scene setup ──────────────────────────────────────────────
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xd5dbe3);
-// Fog — use FogExp2 for density control
 scene.fog = new THREE.FogExp2(0xd5dbe3, 0.008);
 
 // Camera — angled top-down like Dungeon Encounters
-// Positioned south of the map center, looking north into the screen
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.5, 80);
 camera.position.set(6.6, 18, 20);
 camera.lookAt(6.6, 0, 6.6);
 
 // Orbit controls — scroll to zoom, right-drag to rotate, middle-drag to pan
 const controls = new OrbitControls(camera, document.body);
-controls.target.set(6.6, 0.5, 6.6); // center of 12×12 grid
+controls.target.set(6.6, 0.5, 6.6);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 5;
 controls.maxDistance = 35;
-controls.maxPolarAngle = Math.PI / 2.2; // don't go below ground
+controls.maxPolarAngle = Math.PI / 2.2;
 controls.mouseButtons = {
-  LEFT: null,            // left-click does nothing (we may use it later)
+  LEFT: null,
   MIDDLE: THREE.MOUSE.PAN,
   RIGHT: THREE.MOUSE.ROTATE,
 };
 controls.touches = {
-  ONE: THREE.TOUCH.ROTATE,
+  ONE: null,              // single-finger swipe → movement
   TWO: THREE.TOUCH.DOLLY_PAN,
 };
 controls.update();
@@ -71,29 +79,16 @@ ground.position.y = -0.5;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// ── Dungeon ──────────────────────────────────────────────────
-const DUNGEON_SIZE = 12;
-const REVEAL_RADIUS = 1;
-const MAX_FLOOR = 99;
-let floorNum = 1;
-let gameWon = false;
-
-// ── Animation state ──────────────────────────────────────────
-let shakeTimer = 0;        // screen shake (RandomMap)
-let flashTimer = 0;        // white flash (Exit)
-let shieldBreakTimer = 0;  // yellow flash + pulse (shield absorb)
-let playerAnim: 'none' | 'shrink' | 'grow' = 'none';
-let playerAnimTarget = new THREE.Vector3();
-let playerScaleVel = 0;
-let dungeon = generateDungeon(DUNGEON_SIZE, DUNGEON_SIZE, floorNum);
-let dungeonMeshes = createDungeonMesh(dungeon);
-let fogData = createFogOverlay(dungeon);
+// ── Game state (engine owns logic; rendering reads from it) ──
+let gameState: EngineState = createInitialState(rng);
+let dungeonMeshes = createDungeonMesh(gameState.dungeon);
+let fogData = createFogOverlay(gameState.dungeon);
 scene.add(dungeonMeshes.group);
 scene.add(dungeonMeshes.labels);
 scene.add(fogData.group);
 
 // ── Player ───────────────────────────────────────────────────
-const player = new Player({ x: 0, y: 0, floor: floorNum });
+const player = new Player({ x: 0, y: 0, floor: 1 });
 scene.add(player.mesh);
 
 // ── Border walls ─────────────────────────────────────────────
@@ -105,35 +100,29 @@ function createBorderWalls(w: number, h: number) {
   for (let x = -1; x <= w; x++) {
     const top = new THREE.Mesh(wallGeo, wallMat);
     top.position.set(x * 1.2, 0.75, -1 * 1.2);
-    top.castShadow = true;
-    top.receiveShadow = true;
+    top.castShadow = true; top.receiveShadow = true;
     group.add(top);
-
     const bot = new THREE.Mesh(wallGeo, wallMat);
     bot.position.set(x * 1.2, 0.75, h * 1.2);
-    bot.castShadow = true;
-    bot.receiveShadow = true;
+    bot.castShadow = true; bot.receiveShadow = true;
     group.add(bot);
   }
   for (let y = 0; y < h; y++) {
     const left = new THREE.Mesh(wallGeo, wallMat);
     left.position.set(-1 * 1.2, 0.75, y * 1.2);
-    left.castShadow = true;
-    left.receiveShadow = true;
+    left.castShadow = true; left.receiveShadow = true;
     group.add(left);
-
     const right = new THREE.Mesh(wallGeo, wallMat);
     right.position.set(w * 1.2, 0.75, y * 1.2);
-    right.castShadow = true;
-    right.receiveShadow = true;
+    right.castShadow = true; right.receiveShadow = true;
     group.add(right);
   }
   return group;
 }
-const walls = createBorderWalls(DUNGEON_SIZE, DUNGEON_SIZE);
+const walls = createBorderWalls(CONFIG.dungeon.width, CONFIG.dungeon.height);
 scene.add(walls);
 
-// ── Particles (ambient floating specs) ───────────────────────
+// ── Particles ────────────────────────────────────────────────
 const particlesGeo = new THREE.BufferGeometry();
 const particlesCount = 200;
 const posArray = new Float32Array(particlesCount * 3);
@@ -164,13 +153,13 @@ function addLog(msg: string) {
 }
 
 function updateHUD() {
-  hudPos.textContent = `${player.x},${player.y}`;
+  hudPos.textContent = `${gameState.playerX},${gameState.playerY}`;
 
-  if (gameWon) {
+  if (gameState.gameWon) {
     hudFloor.textContent = t('ui.floorClear');
     hudFloor.style.color = '#06d6a0';
   } else {
-    hudFloor.textContent = t('ui.floor', { floor: floorNum, max: MAX_FLOOR });
+    hudFloor.textContent = t('ui.floor', { floor: gameState.floor, max: CONFIG.dungeon.maxFloor });
     hudFloor.style.color = '';
   }
 
@@ -182,24 +171,19 @@ const keys = new Set<string>();
 
 window.addEventListener('keydown', (e) => {
   keys.add(e.key.toLowerCase());
-
-  // Prevent scrolling for arrow keys and wasd
   if (['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d'].includes(e.key.toLowerCase())) {
     e.preventDefault();
   }
-
-  // Debug: press Space to dump game state
   if (e.key === ' ') {
-    const state = {
-      playerPos: { x: player.x, y: player.y },
+    console.log('Game state:', {
+      playerPos: { x: gameState.playerX, y: gameState.playerY },
       playerMoving: player.isMoving,
-      hasShield: player.hasShield,
-      floorNum,
-      gameWon,
-      dungeonExit: { x: dungeon.exitX, y: dungeon.exitY },
-    };
-    console.log('Game state:', state);
-    addLog('▌ ' + t('log.debug', { x: player.x, y: player.y, moving: player.isMoving ? 1 : 0, floor: floorNum }));
+      hasShield: gameState.hasShield,
+      floor: gameState.floor,
+      gameWon: gameState.gameWon,
+      dungeonExit: { x: gameState.dungeon.exitX, y: gameState.dungeon.exitY },
+    });
+    addLog('▌ ' + t('log.debug', { x: gameState.playerX, y: gameState.playerY, moving: player.isMoving ? 1 : 0, floor: gameState.floor }));
   }
 });
 
@@ -210,134 +194,94 @@ window.addEventListener('keyup', (e) => {
 const _camDir = new THREE.Vector3();
 const _camRight = new THREE.Vector3();
 
-function handleInput() {
-  if (player.isMoving || gameWon || playerAnim !== 'none') return;
-
-  let inputX = 0, inputY = 0;
-  if (keys.has('w') || keys.has('arrowup'))    inputY += 1;
-  if (keys.has('s') || keys.has('arrowdown'))  inputY -= 1;
-  if (keys.has('a') || keys.has('arrowleft'))  inputX -= 1;
-  if (keys.has('d') || keys.has('arrowright')) inputX += 1;
-
-  if (inputX === 0 && inputY === 0) return;
-
-  // Camera-relative direction using 3D cross product (handles any camera angle)
-  _camDir.subVectors(controls.target, camera.position).normalize();
-  _camRight.crossVectors(_camDir, new THREE.Vector3(0, 1, 0)).normalize();
-
-  const worldX = inputX * _camRight.x + inputY * _camDir.x;
-  const worldZ = inputX * _camRight.z + inputY * _camDir.z;
-
-  // Snap to nearest cardinal grid direction
-  const angle = Math.atan2(worldX, worldZ);
-  const sector = Math.round(angle / (Math.PI / 2));
-  const snapped = ((sector % 4) + 4) % 4;
-
-  // 0: +Z (south), 1: +X (east), 2: -Z (north), 3: -X (west)
-  let dx = 0, dy = 0;
-  switch (snapped) {
-    case 0: dy = 1;  break;
-    case 1: dx = 1;  break;
-    case 2: dy = -1; break;
-    case 3: dx = -1; break;
-  }
-
-  const action = player.attemptMove(dx, dy, dungeon);
-  if (!action) {
-    addLog('▌ ' + t('log.cannotMove'));
-    return;
-  }
-
-  // Clear movement keys so one press = one tile
+function clearMovementKeys() {
   for (const k of ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']) {
     keys.delete(k);
   }
+}
 
-  // Proximity hint — warn when close to exit
-  const distToExit = Math.abs(action.x - dungeon.exitX) + Math.abs(action.y - dungeon.exitY);
+// ── Event dispatch: engine → rendering ───────────────────────
 
-  addLog('▌ ' + t('log.moveTo', { x: action.x, y: action.y, tile: describeTile(action.tileType, action.label) }));
+function dispatchEvent(event: GameEvent) {
+  switch (event.kind) {
+    case 'move':
+      player.moveTo(event.toX, event.toY);
+      revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, event.toX, event.toY, CONFIG.dungeon.revealRadius);
+      revealTile(gameState.dungeon, dungeonMeshes, event.toX, event.toY);
+      addLog('▌ ' + t('log.moveTo', { x: event.toX, y: event.toY, tile: getTileNameForEvent(event.tileType, event.tileLabel) }));
+      break;
 
-  // Reveal fog around new position + true tile color
-  revealAround(fogData.meshes, dungeon, dungeonMeshes,action.x, action.y, REVEAL_RADIUS);
-  revealTile(dungeon, dungeonMeshes, action.x, action.y);
+    case 'blocked':
+      addLog('▌ ' + t('log.cannotMove'));
+      break;
 
-  // Handle tile effects
-  if (action.tileType === TileType.Exit) {
-    flashTimer = 0.3;
-    if (floorNum >= MAX_FLOOR) {
-      gameWon = true;
-      addLog('▌ ' + t('log.escaped'));
-      updateHUD();
-      return;
+    case 'exit_reached':
+      flashTimer = 0.3;
+      if (event.floorCleared) {
+        addLog('▌ ' + t('log.escaped'));
+      } else {
+        regenerateDungeonMesh();
+        addLog('▌ ' + t('log.descended', { floor: event.newFloor, max: CONFIG.dungeon.maxFloor }));
+      }
+      break;
+
+    case 'hazard_absorbed':
+      player.setShield(false);
+      shieldBreakTimer = 0.4;
+      addLog('▌ ' + t('log.shieldAbsorbed'));
+      break;
+
+    case 'reset_to_start':
+      playerAnim = 'shrink';
+      playerAnimTarget.set(0, PLAYER_Y, 0);
+      addLog('▌ ' + t('log.sentBack'));
+      break;
+
+    case 'teleported': {
+      const tp = tileToWorld(event.toX, event.toY);
+      playerAnim = 'shrink';
+      playerAnimTarget.set(tp.x, PLAYER_Y, tp.z);
+      (player.mesh as any).__teleportTarget = { tx: event.toX, ty: event.toY };
+      addLog('▌ ' + t('log.teleported', { x: event.toX, y: event.toY }));
+      break;
     }
-    floorNum++;
-    regenerateDungeon();
-    addLog('▌ ' + t('log.descended', { floor: floorNum, max: MAX_FLOOR }));
-  } else if (player.hasShield && isHazardType(action.tileType)) {
-    // Shield absorbs one hazard
-    player.setShield(false);
-    shieldBreakTimer = 0.4;
-    addLog('▌ ' + t('log.shieldAbsorbed'));
-  } else if (action.tileType === TileType.Reset) {
-    // Shrink → teleport to start → grow
-    playerAnim = 'shrink';
-    playerAnimTarget.set(0, PLAYER_Y, 0);
-    addLog('▌ ' + t('log.sentBack'));
-  } else if (action.tileType === TileType.Teleport) {
-    let tx: number, ty: number;
-    do {
-      tx = Math.floor(Math.random() * DUNGEON_SIZE);
-      ty = Math.floor(Math.random() * DUNGEON_SIZE);
-    } while (getTileAt(dungeon, tx, ty)?.type === TileType.Wall);
-    const tp = tileToWorld(tx, ty);
-    playerAnim = 'shrink';
-    playerAnimTarget.set(tp.x, PLAYER_Y, tp.z);
-    // Deferred: reveal + reset after shrink completes (in animate)
-    (player.mesh as any).__teleportTarget = { tx, ty };
-    addLog('▌ ' + t('log.teleported', { x: tx, y: ty }));
-  } else if (action.tileType === TileType.RandomMap) {
-    shakeTimer = 0.35;
-    regenerateDungeon();
-    addLog('▌ ' + t('log.dungeonShifts'));
-  } else if (action.tileType === TileType.Compass) {
-    // Reveal the exit tile
-    const ex = dungeon.exitX, ey = dungeon.exitY;
-    dungeon.tiles[ey][ex].explored = true;
-    fogData.meshes[ey][ex].visible = false;
-    revealTile(dungeon, dungeonMeshes, ex, ey);
-    addLog('▌ ' + t('log.exitLocated', { x: ex, y: ey }));
-  } else if (action.tileType === TileType.Scan) {
-    // Reveal true colors in 3×3 area around player
-    for (let sy = action.y - REVEAL_RADIUS; sy <= action.y + REVEAL_RADIUS; sy++) {
-      for (let sx = action.x - REVEAL_RADIUS; sx <= action.x + REVEAL_RADIUS; sx++) {
-        if (sx >= 0 && sy >= 0 && sx < DUNGEON_SIZE && sy < DUNGEON_SIZE) {
-          revealTile(dungeon, dungeonMeshes, sx, sy);
+
+    case 'map_regenerated':
+      shakeTimer = 0.35;
+      regenerateDungeonMesh();
+      addLog('▌ ' + t('log.dungeonShifts'));
+      break;
+
+    case 'compass_revealed':
+      fogData.meshes[event.exitY][event.exitX].visible = false;
+      revealTile(gameState.dungeon, dungeonMeshes, event.exitX, event.exitY);
+      addLog('▌ ' + t('log.exitLocated', { x: event.exitX, y: event.exitY }));
+      break;
+
+    case 'scan_revealed':
+      // Reveal true colors for ALL tiles on the floor
+      for (let sy = 0; sy < gameState.dungeon.height; sy++) {
+        for (let sx = 0; sx < gameState.dungeon.width; sx++) {
+          revealTile(gameState.dungeon, dungeonMeshes, sx, sy);
         }
       }
-    }
-    addLog('▌ ' + t('log.scanned'));
-  } else if (action.tileType === TileType.Shield) {
-    player.setShield(true);
-    playerScaleVel = 0.3; // brief pulse
-    addLog('▌ ' + t('log.gainedShield'));
-  }
+      addLog('▌ ' + t('log.scanned'));
+      break;
 
-  // Proximity hint after move (not on exit tile)
-  if (action.tileType !== TileType.Exit && distToExit <= 2) {
-    addLog('▌ ' + getProximityMessage(Math.floor(Math.random() * 3)));
-  }
+    case 'shield_gained':
+      player.setShield(true);
+      playerScaleVel = 0.3;
+      addLog('▌ ' + t('log.gainedShield'));
+      break;
 
-  updateHUD();
+    case 'victory':
+      addLog('▌ ' + t('log.escaped'));
+      break;
+  }
 }
 
-function isHazardType(type: TileType): boolean {
-  return type === TileType.Reset
-      || type === TileType.Teleport
-      || type === TileType.RandomMap;
-}
-
-function describeTile(type: TileType, label: string): string {
+/** Map tile type to i18n tile name for log messages */
+function getTileNameForEvent(type: TileType, label: string): string {
   switch (type) {
     case TileType.Empty:     return label ? `${getTileName('empty')} ${label}` : getTileName('empty');
     case TileType.Reset:     return getTileName('reset');
@@ -352,31 +296,97 @@ function describeTile(type: TileType, label: string): string {
   }
 }
 
-function regenerateDungeon() {
-  dungeon = generateDungeon(DUNGEON_SIZE, DUNGEON_SIZE, floorNum);
+// ── Input handling ───────────────────────────────────────────
 
-  // Remove old meshes
+function handleInput() {
+  if (player.isMoving || gameState.gameWon || playerAnim !== 'none') return;
+
+  let inputX = 0, inputY = 0;
+  if (keys.has('w') || keys.has('arrowup'))    inputY += 1;
+  if (keys.has('s') || keys.has('arrowdown'))  inputY -= 1;
+  if (keys.has('a') || keys.has('arrowleft'))  inputX -= 1;
+  if (keys.has('d') || keys.has('arrowright')) inputX += 1;
+
+  if (inputX === 0 && inputY === 0) return;
+
+  // Camera-relative direction
+  _camDir.subVectors(controls.target, camera.position).normalize();
+  _camRight.crossVectors(_camDir, new THREE.Vector3(0, 1, 0)).normalize();
+
+  const worldX = inputX * _camRight.x + inputY * _camDir.x;
+  const worldZ = inputX * _camRight.z + inputY * _camDir.z;
+
+  const angle = Math.atan2(worldX, worldZ);
+  const sector = Math.round(angle / (Math.PI / 2));
+  const snapped = ((sector % 4) + 4) % 4;
+
+  let dx = 0, dy = 0;
+  switch (snapped) {
+    case 0: dy = 1;  break;
+    case 1: dx = 1;  break;
+    case 2: dy = -1; break;
+    case 3: dx = -1; break;
+  }
+
+  // Let the engine process the move
+  const result = processMove(gameState, dx, dy, rng);
+  gameState = result.state;
+
+  if (result.events.length === 0) return;
+
+  // Clear keys for discrete input (one press = one action)
+  clearMovementKeys();
+
+  // Dispatch all events
+  for (const event of result.events) {
+    dispatchEvent(event);
+  }
+
+  // Proximity hint after move
+  const lastEvent = result.events[result.events.length - 1];
+  if (lastEvent.kind === 'move' && lastEvent.tileType !== TileType.Exit) {
+    const distToExit = Math.abs(lastEvent.toX - gameState.dungeon.exitX) + Math.abs(lastEvent.toY - gameState.dungeon.exitY);
+    if (distToExit <= 2) {
+      addLog('▌ ' + getProximityMessage(rng.nextInt(3)));
+    }
+  }
+
+  updateHUD();
+}
+
+// ── Rendering regeneration (driven by engine state) ──────────
+
+/** Dispose a beacon group (torus + sphere dots) */
+function disposeBeacon(beacon: THREE.Group): void {
+  beacon.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) {
+      obj.geometry.dispose();
+      if (Array.isArray(obj.material)) {
+        for (const m of obj.material) m.dispose();
+      } else if (obj.material) {
+        obj.material.dispose();
+      }
+    }
+  });
+}
+
+function regenerateDungeonMesh() {
+  disposeDungeonMeshes(dungeonMeshes);
+  disposeFogOverlay(fogData);
   scene.remove(dungeonMeshes.group);
   scene.remove(dungeonMeshes.labels);
   scene.remove(fogData.group);
 
-  // Create new ones
-  dungeonMeshes = createDungeonMesh(dungeon);
-  fogData = createFogOverlay(dungeon);
+  dungeonMeshes = createDungeonMesh(gameState.dungeon);
+  fogData = createFogOverlay(gameState.dungeon);
   scene.add(dungeonMeshes.group);
   scene.add(dungeonMeshes.labels);
   scene.add(fogData.group);
 
-  // Reset player position
-  player.resetPosition(0, 0);
-
-  // Spawn new exit beacon
+  player.resetPosition(gameState.playerX, gameState.playerY);
   spawnExitBeacon();
-
-  // Reveal starting area (fog + tile color)
-  revealAround(fogData.meshes, dungeon, dungeonMeshes,0, 0, REVEAL_RADIUS);
-  revealTile(dungeon, dungeonMeshes, 0, 0);
-
+  revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, gameState.playerX, gameState.playerY, CONFIG.dungeon.revealRadius);
+  revealTile(gameState.dungeon, dungeonMeshes, gameState.playerX, gameState.playerY);
   updateHUD();
 }
 
@@ -390,8 +400,6 @@ window.addEventListener('touchend', (e) => {
   const dx = e.changedTouches[0].clientX - touchStartX;
   const dy = e.changedTouches[0].clientY - touchStartY;
   if (Math.abs(dx) < 20 && Math.abs(dy) < 20) return;
-
-  // Simulate key press based on swipe direction
   if (Math.abs(dx) > Math.abs(dy)) {
     keys.add(dx > 0 ? 'd' : 'a');
     setTimeout(() => keys.delete(dx > 0 ? 'd' : 'a'), 50);
@@ -410,8 +418,16 @@ window.addEventListener('resize', () => {
 
 // ── Game loop ─────────────────────────────────────────────────
 const clock = new THREE.Clock();
-
 let loopCrashed = false;
+
+// Animation state
+let shakeTimer = 0;
+let shakeOffset = new THREE.Vector3();
+let flashTimer = 0;
+let shieldBreakTimer = 0;
+let playerAnim: 'none' | 'shrink' | 'grow' = 'none';
+let playerAnimTarget = new THREE.Vector3();
+let playerScaleVel = 0;
 
 function animate() {
   if (loopCrashed) return;
@@ -419,13 +435,18 @@ function animate() {
   try {
     const dt = Math.min(clock.getDelta(), 0.1);
 
+    // Undo previous shake before controls update
+    if (shakeOffset.lengthSq() > 0) {
+      camera.position.sub(shakeOffset);
+      shakeOffset.set(0, 0, 0);
+    }
+
     handleInput();
     player.update();
-
     controls.update();
 
     // Animate exit beacon
-    if (exitBeacon && !gameWon) {
+    if (exitBeacon && !gameState.gameWon) {
       const t = clock.elapsedTime;
       exitBeacon.children.forEach((child, i) => {
         if (child.userData.angle !== undefined) {
@@ -443,20 +464,22 @@ function animate() {
     startRing.scale.setScalar(s);
     (startRing.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.3 + Math.sin(clock.elapsedTime * 1.8) * 0.3;
 
-    // Subtle particle drift
     particles.rotation.y += dt * 0.05;
     particles.position.y += Math.sin(clock.elapsedTime * 0.3) * dt * 0.3;
 
-    // Fade in fog from edges — intensify as you go deeper
-    (scene.fog as THREE.FogExp2).density = 0.012 + floorNum * 0.003;
+    // Fog density
+    (scene.fog as THREE.FogExp2).density = CONFIG.fog.forFloor(gameState.floor);
 
-    // ── Effect animations ──────────────────────────────────
     // Screen shake
     if (shakeTimer > 0) {
       shakeTimer -= dt;
       const intensity = (shakeTimer / 0.35) * 0.2;
-      camera.position.x += (Math.random() - 0.5) * intensity;
-      camera.position.z += (Math.random() - 0.5) * intensity;
+      shakeOffset.set(
+        (Math.random() - 0.5) * intensity,
+        0,
+        (Math.random() - 0.5) * intensity,
+      );
+      camera.position.add(shakeOffset);
     }
 
     // White flash (Exit)
@@ -464,22 +487,15 @@ function animate() {
       flashTimer -= dt;
       const a = (flashTimer / 0.3);
       scene.background = new THREE.Color().lerpColors(
-        new THREE.Color(0xd5dbe3),
-        new THREE.Color(0xffffff),
-        a,
-      );
+        new THREE.Color(0xd5dbe3), new THREE.Color(0xffffff), a);
     }
 
-    // Shield break flash (amber)
+    // Shield break flash
     if (shieldBreakTimer > 0) {
       shieldBreakTimer -= dt;
       const a = Math.min(shieldBreakTimer / 0.2, 1);
       scene.background = new THREE.Color().lerpColors(
-        new THREE.Color(0xd5dbe3),
-        new THREE.Color(0xffd166),
-        a,
-      );
-      // Pulse player scale
+        new THREE.Color(0xd5dbe3), new THREE.Color(0xffd166), a);
       const pulse = 1 + Math.sin((0.4 - shieldBreakTimer) * 20) * 0.2 * a;
       player.mesh.scale.setScalar(pulse);
     }
@@ -489,18 +505,16 @@ function animate() {
       const s = player.mesh.scale.x - dt * 6;
       if (s <= 0.05) {
         player.mesh.scale.setScalar(0);
-        // Execute the actual reposition
         const tp = (player.mesh as any).__teleportTarget;
         if (tp) {
           player.resetPosition(tp.tx, tp.ty);
-          revealAround(fogData.meshes, dungeon, dungeonMeshes, tp.tx, tp.ty, REVEAL_RADIUS);
-          revealTile(dungeon, dungeonMeshes, tp.tx, tp.ty);
+          revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, tp.tx, tp.ty, CONFIG.dungeon.revealRadius);
+          revealTile(gameState.dungeon, dungeonMeshes, tp.tx, tp.ty);
           delete (player.mesh as any).__teleportTarget;
         } else {
-          // Reset tile: go to start
           player.resetPosition(0, 0);
-          revealAround(fogData.meshes, dungeon, dungeonMeshes, 0, 0, REVEAL_RADIUS);
-          revealTile(dungeon, dungeonMeshes, 0, 0);
+          revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, 0, 0, CONFIG.dungeon.revealRadius);
+          revealTile(gameState.dungeon, dungeonMeshes, 0, 0);
         }
         playerAnim = 'grow';
         updateHUD();
@@ -541,12 +555,8 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
-// ── i18n ─────────────────────────────────────────────────────
-initI18n();
-
 // ── Start overlay ────────────────────────────────────────────
 const overlay = document.getElementById('overlay')!;
-
 function dismissOverlay() {
   overlay.classList.add('hidden');
   setTimeout(() => overlay.remove(), 500);
@@ -560,7 +570,13 @@ langToggle.addEventListener('click', (e) => {
   e.stopPropagation();
   const next = getLang() === 'en' ? 'zh' : 'en';
   setLang(next);
-  regenerateDungeon();
+  refreshTileLabels(gameState.dungeon.tiles);
+  const rebuilt = rebuildAllLabels(gameState.dungeon, dungeonMeshes);
+  scene.remove(dungeonMeshes.labels);
+  dungeonMeshes.labels = rebuilt.labels;
+  dungeonMeshes.labelSprites = rebuilt.labelSprites;
+  scene.add(dungeonMeshes.labels);
+  updateHUD();
 });
 
 // ── Exit beacon ───────────────────────────────────────────────
@@ -575,7 +591,6 @@ function createExitBeacon(x: number, y: number): THREE.Group {
   ring.position.y = 0.2;
   group.add(ring);
 
-  // Floating dots
   const dotGeo = new THREE.SphereGeometry(0.06, 8, 8);
   const dotMat = new THREE.MeshStandardMaterial({ color: 0x06d6a0, emissive: 0x06d6a0, emissiveIntensity: 1 });
   for (let i = 0; i < 6; i++) {
@@ -590,12 +605,15 @@ function createExitBeacon(x: number, y: number): THREE.Group {
 }
 
 function spawnExitBeacon() {
-  if (exitBeacon) scene.remove(exitBeacon);
-  exitBeacon = createExitBeacon(dungeon.exitX, dungeon.exitY);
+  if (exitBeacon) {
+    disposeBeacon(exitBeacon);
+    scene.remove(exitBeacon);
+  }
+  exitBeacon = createExitBeacon(gameState.dungeon.exitX, gameState.dungeon.exitY);
   scene.add(exitBeacon);
 }
 
-// ── Start marker (pulsing ring at origin) ─────────────────────
+// ── Start marker ──────────────────────────────────────────────
 const startRingGeo = new THREE.TorusGeometry(0.5, 0.05, 16, 32);
 const startRingMat = new THREE.MeshStandardMaterial({ color: 0x118ab2, emissive: 0x118ab2, emissiveIntensity: 0.5 });
 const startRing = new THREE.Mesh(startRingGeo, startRingMat);
@@ -605,7 +623,7 @@ scene.add(startRing);
 
 // ── Start ────────────────────────────────────────────────────
 spawnExitBeacon();
-revealAround(fogData.meshes, dungeon, dungeonMeshes,0, 0, REVEAL_RADIUS);
-revealTile(dungeon, dungeonMeshes, 0, 0);
+revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, 0, 0, CONFIG.dungeon.revealRadius);
+revealTile(gameState.dungeon, dungeonMeshes, 0, 0);
 updateHUD();
 animate();

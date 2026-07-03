@@ -7,6 +7,7 @@ const translations = {
     ui: {
       title: 'Gridmaze',
       floor: 'Floor {floor} / {max}',
+      floorLabel: 'Floor',
       floorClear: 'CLEAR!',
       position: 'Position',
       shieldActive: 'Shield active',
@@ -32,7 +33,7 @@ const translations = {
       compass: 'Compass',
       compassEffect: '→exit',
       scan: 'Scan',
-      scanEffect: 'nearby',
+      scanEffect: 'all',
       shield: 'Shield',
       shieldEffect: 'block 1',
     },
@@ -46,7 +47,7 @@ const translations = {
       teleported: 'Teleported to ({x}, {y})!',
       dungeonShifts: 'The dungeon shifts around you...',
       exitLocated: 'Exit located at ({x}, {y})!',
-      scanned: 'Scanned nearby area!',
+      scanned: 'Scanned entire floor!',
       gainedShield: 'Gained a shield! Next hazard will be blocked.',
       debug: 'Debug: at ({x},{y}) moving={moving} floor={floor}',
       proximity: [
@@ -84,6 +85,7 @@ const translations = {
     ui: {
       title: 'Gridmaze',
       floor: '第 {floor} / {max} 层',
+      floorLabel: '楼层',
       floorClear: '通关！',
       position: '位置',
       shieldActive: '护盾生效中',
@@ -109,7 +111,7 @@ const translations = {
       compass: '指南针',
       compassEffect: '→出口',
       scan: '扫描',
-      scanEffect: '附近',
+      scanEffect: '全部',
       shield: '护盾',
       shieldEffect: '挡 1 次',
     },
@@ -123,7 +125,7 @@ const translations = {
       teleported: '传送到了 ({x}, {y})！',
       dungeonShifts: '迷宫在你周围变幻……',
       exitLocated: '出口位于 ({x}, {y})！',
-      scanned: '扫描了附近区域！',
+      scanned: '扫描了整层！',
       gainedShield: '获得护盾！下一次危险效果将被阻挡。',
       debug: '调试：位于 ({x},{y}) 移动中={moving} 层数={floor}',
       proximity: [
@@ -237,4 +239,19 @@ export function getTileName(key: keyof typeof translations.en.tileNames): string
 export function getProximityMessage(index: number): string {
   const msgs = translations[currentLang].log.proximity;
   return msgs[index % msgs.length];
+}
+
+/**
+ * Update tile labels in dungeon data to match current language.
+ * Call after setLang() when language changes at runtime.
+ */
+export function refreshTileLabels(tiles: { type: number; label: string }[][]): void {
+  for (const row of tiles) {
+    for (const tile of row) {
+      // Only update non-numeric special-tile labels; numbers and 'EX' are language-independent
+      if (tile.type >= 1 && tile.type <= 6) {
+        tile.label = getTileLabel(tile.type);
+      }
+    }
+  }
 }

@@ -1,8 +1,11 @@
 import * as THREE from 'three';
-import { TileType, DungeonData, Tile } from './types';
+import { TileType, DungeonData } from './types';
 import { getTileLabel } from './i18n';
 
-const COLORS: Record<TileType, number> = {
+// Re-export pure game logic from game/ for backward compatibility
+export { generateDungeon, getTileAt, hasPath, isPassable, randomTileType, tileLabel } from './game/generation';
+
+export const COLORS: Record<TileType, number> = {
   [TileType.Empty]:     0xeeeeee,
   [TileType.Reset]:     0x457b9d,
   [TileType.Teleport]:  0x9b5de5,
@@ -15,180 +18,25 @@ const COLORS: Record<TileType, number> = {
   [TileType.Start]:     0x118ab2,
 };
 
-const BASE_WEIGHTS: { type: TileType; weight: number }[] = [
-  { type: TileType.Empty,     weight: 40 },
-  { type: TileType.Wall,      weight: 10 },
-  { type: TileType.Reset,     weight: 18 },
-  { type: TileType.Teleport,  weight: 18 },
-  { type: TileType.RandomMap, weight: 8 },
-  { type: TileType.Compass,   weight: 6 },
-  { type: TileType.Scan,      weight: 6 },
-  { type: TileType.Shield,    weight: 6 },
-];
-
-/**
- * Return scaled weights for a given floor (1-99).
- * Higher floors = more walls, more events, more rewards, fewer empty tiles.
- */
-function scaledWeights(floor: number): { type: TileType; weight: number }[] {
-  const t = (floor - 1) / 98; // 0..1
-  return [
-    { type: TileType.Empty,     weight: Math.max(5, 40 - Math.floor(t * 25)) },
-    { type: TileType.Wall,      weight: 10 + Math.floor(t * 30) },
-    { type: TileType.Reset,     weight: 18 + Math.floor(t * 12) },
-    { type: TileType.Teleport,  weight: 18 + Math.floor(t * 12) },
-    { type: TileType.RandomMap, weight: 8 + Math.floor(t * 20) },
-    { type: TileType.Compass,   weight: Math.max(2, 6 - Math.floor(t * 3)) },
-    { type: TileType.Scan,      weight: Math.max(2, 6 - Math.floor(t * 3)) },
-    { type: TileType.Shield,    weight: Math.max(2, 6 - Math.floor(t * 3)) },
-  ];
-}
-
-function randomTileType(floor: number): TileType {
-  const w = scaledWeights(floor);
-  const total = w.reduce((s, x) => s + x.weight, 0);
-  let r = Math.random() * total;
-  for (const { type, weight } of w) {
-    r -= weight;
-    if (r <= 0) return type;
-  }
-  return TileType.Empty;
-}
-
-function tileLabel(type: TileType): string {
-  switch (type) {
-    case TileType.Reset:     return getTileLabel(TileType.Reset);
-    case TileType.Teleport:  return getTileLabel(TileType.Teleport);
-    case TileType.RandomMap: return getTileLabel(TileType.RandomMap);
-    case TileType.Compass:   return getTileLabel(TileType.Compass);
-    case TileType.Scan:      return getTileLabel(TileType.Scan);
-    case TileType.Shield:    return getTileLabel(TileType.Shield);
-    case TileType.Empty:     return Math.random() < 0.1 ? String(Math.floor(Math.random() * 9)) : '';
-    default:                 return '';
-  }
-}
-
-/**
- * Check whether stepping on this tile type is allowed
- * (only Wall blocks movement)
- */
-function isPassable(type: TileType): boolean {
-  return type !== TileType.Wall;
-}
-
-/** BFS to verify a path exists from start to goal (only walls block) */
-function hasPath(
-  grid: TileType[][],
-  w: number,
-  h: number,
-  sx: number,
-  sy: number,
-  gx: number,
-  gy: number,
-): boolean {
-  if (sx === gx && sy === gy) return true;
-  const visited = new Uint8Array(w * h);
-  const queue: [number, number][] = [[sx, sy]];
-  visited[sy * w + sx] = 1;
-  let head = 0;
-
-  while (head < queue.length) {
-    const [cx, cy] = queue[head++];
-    for (const [nx, ny] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) {
-      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-      if (visited[ny * w + nx]) continue;
-      if (!isPassable(grid[ny][nx])) continue;
-      if (nx === gx && ny === gy) return true;
-      visited[ny * w + nx] = 1;
-      queue.push([nx, ny]);
-    }
-  }
-  return false;
-}
-
-export function generateDungeon(
-  width: number,
-  height: number,
-  floor: number
-): DungeonData {
-  const sx = 0, sy = 0;
-  const ex = width - 2 + Math.floor(Math.random() * 2);
-  const ey = height - 2 + Math.floor(Math.random() * 2);
-
-  // Step 1: carve a guaranteed passable path from start to exit
-  const safe = new Uint8Array(width * height);
-  safe[sy * width + sx] = 1;
-
-  let cx = sx, cy = sy;
-  const maxSteps = width * height * 3;
-  let steps = 0;
-
-  // Higher floors → more winding (pick from more candidates)
-  const t = (floor - 1) / 98;
-  const pickFromN = 2 + Math.floor(t * 3); // 2 → 5
-
-  while ((cx !== ex || cy !== ey) && steps < maxSteps) {
-    steps++;
-    const cands: [number, number][] = [];
-    for (const [nx, ny] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) {
-      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-      if (nx === sx && ny === sy && !(ex === sx && ey === sy)) continue;
-      cands.push([nx, ny]);
-    }
-    if (cands.length === 0) break;
-
-    // Prefer tiles closer to the goal
-    cands.sort((a, b) => {
-      const da = Math.abs(a[0] - ex) + Math.abs(a[1] - ey);
-      const db = Math.abs(b[0] - ex) + Math.abs(b[1] - ey);
-      return da - db;
-    });
-
-    // Higher floors: more winding paths
-    const pickFrom = Math.min(pickFromN, cands.length);
-    const [nx, ny] = cands[Math.floor(Math.random() * pickFrom)];
-
-    cx = nx; cy = ny;
-    safe[cy * width + cx] = 1;
-  }
-
-  safe[sy * width + sx] = 1;
-  safe[ey * width + ex] = 1;
-
-  // Step 2: fill tiles (use floor-scaled weights)
-  const tiles: Tile[][] = [];
-  for (let y = 0; y < height; y++) {
-    const row: Tile[] = [];
-    for (let x = 0; x < width; x++) {
-      let type: TileType;
-      if (safe[y * width + x]) {
-        type = TileType.Empty;
-      } else {
-        type = randomTileType(floor);
-      }
-      row.push({ x, y, type, label: tileLabel(type), explored: false, steppedOn: false });
-    }
-    tiles.push(row);
-  }
-
-  tiles[sy][sx].type = TileType.Start;
-  tiles[sy][sx].label = '';
-  tiles[ey][ex].type = TileType.Exit;
-  tiles[ey][ex].label = 'EX';
-
-  // Safety check
-  if (!hasPath(tiles.map(r => r.map(t => t.type)), width, height, sx, sy, ex, ey)) {
-    return generateDungeon(width, height, floor);
-  }
-
-  return { width, height, exitX: ex, exitY: ey, tiles };
-}
-
 // ── Rendering ──────────────────────────────────────────────────
 
-const TILE_SIZE = 1.2;
+export const TILE_SIZE = 1.2;
 const PAD = 0.08;
 const UNKNOWN_COLOR = 0x7a7a8a; // neutral grey for unrevealed tiles
+
+// Shared geometries — created once, reused across all dungeon rebuilds
+let sharedTileGeo: THREE.BoxGeometry | null = null;
+let sharedFogGeo: THREE.BoxGeometry | null = null;
+
+function getTileGeo(): THREE.BoxGeometry {
+  if (!sharedTileGeo) sharedTileGeo = new THREE.BoxGeometry(TILE_SIZE - PAD, 0.12, TILE_SIZE - PAD);
+  return sharedTileGeo;
+}
+
+function getFogGeo(): THREE.BoxGeometry {
+  if (!sharedFogGeo) sharedFogGeo = new THREE.BoxGeometry(TILE_SIZE - PAD, 0.06, TILE_SIZE - PAD);
+  return sharedFogGeo;
+}
 
 export interface DungeonMeshes {
   group: THREE.Group;
@@ -200,6 +48,7 @@ export interface DungeonMeshes {
 export function createDungeonMesh(dungeon: DungeonData): DungeonMeshes {
   const group = new THREE.Group();
   const meshes: THREE.Mesh[][] = [];
+  const tileGeo = getTileGeo();
 
   for (let y = 0; y < dungeon.height; y++) {
     const row: THREE.Mesh[] = [];
@@ -211,9 +60,8 @@ export function createDungeonMesh(dungeon: DungeonData): DungeonMeshes {
         ? COLORS[tile.type]
         : UNKNOWN_COLOR;
 
-      const geo = new THREE.BoxGeometry(TILE_SIZE - PAD, 0.12, TILE_SIZE - PAD);
       const mat = new THREE.MeshStandardMaterial({ color });
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(tileGeo, mat);
       mesh.position.set(x * TILE_SIZE, 0, y * TILE_SIZE);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -228,6 +76,35 @@ export function createDungeonMesh(dungeon: DungeonData): DungeonMeshes {
   const { group: labelGroup, sprites } = buildLabels(dungeon);
 
   return { group, tiles: meshes, labels: labelGroup, labelSprites: sprites };
+}
+
+/** Dispose all GPU resources held by dungeon meshes (materials and label textures).
+ *  Shared geometries are NOT disposed — they persist across rebuilds. */
+export function disposeDungeonMeshes(meshes: DungeonMeshes): void {
+  for (const row of meshes.tiles) {
+    for (const mesh of row) {
+      if (Array.isArray(mesh.material)) {
+        for (const m of mesh.material) m.dispose();
+      } else if (mesh.material) {
+        mesh.material.dispose();
+      }
+    }
+  }
+  disposeLabelGroup(meshes.labels);
+}
+
+/** Dispose all label sprites and their canvas textures */
+export function disposeLabelGroup(group: THREE.Group): void {
+  group.traverse((obj) => {
+    if (obj instanceof THREE.Sprite) {
+      const mat = obj.material as THREE.SpriteMaterial;
+      if (mat.map) {
+        mat.map.dispose();
+        mat.map = null;
+      }
+      mat.dispose();
+    }
+  });
 }
 
 /** Shared helper: create a label sprite with dark background circle for contrast */
@@ -310,6 +187,23 @@ export function createTileLabels(dungeon: DungeonData): THREE.Group {
   return group;
 }
 
+/**
+ * Rebuild all label sprites in-place — disposes old sprites and creates new ones.
+ * Used when language changes at runtime (label text depends on current language).
+ * Returns the new label group and sprites array to swap into DungeonMeshes.
+ */
+export function rebuildAllLabels(
+  dungeon: DungeonData,
+  oldMeshes: DungeonMeshes,
+): { labels: THREE.Group; labelSprites: (THREE.Sprite | null)[][] } {
+  // Dispose old label sprites
+  disposeLabelGroup(oldMeshes.labels);
+
+  // Rebuild labels for all stepped-on tiles (and start/exit tiles)
+  const { group, sprites } = buildLabels(dungeon);
+  return { labels: group, labelSprites: sprites };
+}
+
 // ── Fog of war ──────────────────────────────────────────────────
 
 export function createFogOverlay(dungeon: DungeonData): {
@@ -318,7 +212,7 @@ export function createFogOverlay(dungeon: DungeonData): {
 } {
   const group = new THREE.Group();
   const meshes: THREE.Mesh[][] = [];
-  const fogGeo = new THREE.BoxGeometry(TILE_SIZE - PAD, 0.06, TILE_SIZE - PAD);
+  const fogGeo = getFogGeo();
   const fogMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.9 });
 
   for (let y = 0; y < dungeon.height; y++) {
@@ -334,6 +228,18 @@ export function createFogOverlay(dungeon: DungeonData): {
   }
 
   return { group, meshes };
+}
+
+/** Dispose fog material (shared geometry is NOT disposed) */
+export function disposeFogOverlay(fogData: { group: THREE.Group; meshes: THREE.Mesh[][] }): void {
+  if (fogData.meshes.length > 0 && fogData.meshes[0].length > 0) {
+    const mesh = fogData.meshes[0][0];
+    if (Array.isArray(mesh.material)) {
+      for (const m of mesh.material) m.dispose();
+    } else if (mesh.material) {
+      mesh.material.dispose();
+    }
+  }
 }
 
 /** Show only the label sprite (no color change, no steppedOn flag) */
@@ -379,11 +285,6 @@ export function revealAround(
     }
   }
   return count;
-}
-
-export function getTileAt(dungeon: DungeonData, x: number, y: number): Tile | null {
-  if (x < 0 || y < 0 || x >= dungeon.width || y >= dungeon.height) return null;
-  return dungeon.tiles[y][x];
 }
 
 export function worldToTile(worldX: number, worldZ: number): { x: number; y: number } {
