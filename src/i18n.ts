@@ -249,7 +249,7 @@ export function refreshTileLabels(tiles: { type: number; label: string }[][]): v
   for (const row of tiles) {
     for (const tile of row) {
       // Only update non-numeric special-tile labels; numbers and 'EX' are language-independent
-      if (tile.type >= 1 && tile.type <= 6) {
+      if (tile.type >= 1 && tile.type <= 7) {
         tile.label = getTileLabel(tile.type);
       }
     }

@@ -255,6 +255,7 @@ function dispatchEvent(event: GameEvent) {
     case 'compass_revealed':
       fogData.meshes[event.exitY][event.exitX].visible = false;
       revealTile(gameState.dungeon, dungeonMeshes, event.exitX, event.exitY);
+      spawnExitBeacon();
       addLog('▌ ' + t('log.exitLocated', { x: event.exitX, y: event.exitY }));
       break;
 
@@ -265,6 +266,7 @@ function dispatchEvent(event: GameEvent) {
           revealTile(gameState.dungeon, dungeonMeshes, sx, sy);
         }
       }
+      spawnExitBeacon();
       addLog('▌ ' + t('log.scanned'));
       break;
 
@@ -377,6 +379,13 @@ function regenerateDungeonMesh() {
   scene.remove(dungeonMeshes.labels);
   scene.remove(fogData.group);
 
+  // Remove old beacon (exit position changed with new dungeon)
+  if (exitBeacon) {
+    disposeBeacon(exitBeacon);
+    scene.remove(exitBeacon);
+    exitBeacon = null;
+  }
+
   dungeonMeshes = createDungeonMesh(gameState.dungeon);
   fogData = createFogOverlay(gameState.dungeon);
   scene.add(dungeonMeshes.group);
@@ -384,7 +393,6 @@ function regenerateDungeonMesh() {
   scene.add(fogData.group);
 
   player.resetPosition(gameState.playerX, gameState.playerY);
-  spawnExitBeacon();
   revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, gameState.playerX, gameState.playerY, CONFIG.dungeon.revealRadius);
   revealTile(gameState.dungeon, dungeonMeshes, gameState.playerX, gameState.playerY);
   updateHUD();
@@ -622,7 +630,6 @@ startRing.position.set(0, 0.18, 0);
 scene.add(startRing);
 
 // ── Start ────────────────────────────────────────────────────
-spawnExitBeacon();
 revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, 0, 0, CONFIG.dungeon.revealRadius);
 revealTile(gameState.dungeon, dungeonMeshes, 0, 0);
 updateHUD();
