@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TileType, DungeonData, Tile } from './types';
+import { getTileLabel } from './i18n';
 
 const COLORS: Record<TileType, number> = {
   [TileType.Empty]:     0xeeeeee,
@@ -56,12 +57,12 @@ function randomTileType(floor: number): TileType {
 
 function tileLabel(type: TileType): string {
   switch (type) {
-    case TileType.Reset:     return '↺';
-    case TileType.Teleport:  return '↗';
-    case TileType.RandomMap: return '?';
-    case TileType.Compass:   return '⌖';
-    case TileType.Scan:      return '◎';
-    case TileType.Shield:    return '◈';
+    case TileType.Reset:     return getTileLabel(TileType.Reset);
+    case TileType.Teleport:  return getTileLabel(TileType.Teleport);
+    case TileType.RandomMap: return getTileLabel(TileType.RandomMap);
+    case TileType.Compass:   return getTileLabel(TileType.Compass);
+    case TileType.Scan:      return getTileLabel(TileType.Scan);
+    case TileType.Shield:    return getTileLabel(TileType.Shield);
     case TileType.Empty:     return Math.random() < 0.1 ? String(Math.floor(Math.random() * 9)) : '';
     default:                 return '';
   }
