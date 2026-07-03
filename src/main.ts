@@ -4,6 +4,7 @@ import { TileType } from './types';
 import { generateDungeon, createDungeonMesh, createFogOverlay, revealAround, revealTile, getTileAt, tileToWorld } from './dungeon';
 import type { DungeonMeshes } from './dungeon';
 import { Player, PLAYER_Y } from './player';
+import { init as initI18n, setLang, getLang, t, getTileName, getProximityMessage } from './i18n';
 
 // ── Scene setup ──────────────────────────────────────────────
 const scene = new THREE.Scene();
@@ -166,10 +167,11 @@ function updateHUD() {
   hudPos.textContent = `${player.x},${player.y}`;
 
   if (gameWon) {
-    hudFloor.textContent = 'CLEAR!';
+    hudFloor.textContent = t('ui.floorClear');
     hudFloor.style.color = '#06d6a0';
   } else {
-    hudFloor.textContent = `${floorNum} / ${MAX_FLOOR}`;
+    hudFloor.textContent = t('ui.floor', { floor: floorNum, max: MAX_FLOOR });
+    hudFloor.style.color = '';
   }
 
   hudShield.style.opacity = player.hasShield ? '1' : '0';
@@ -197,7 +199,7 @@ window.addEventListener('keydown', (e) => {
       dungeonExit: { x: dungeon.exitX, y: dungeon.exitY },
     };
     console.log('Game state:', state);
-    addLog(`▌ Debug: at (${player.x},${player.y}) moving=${player.isMoving} floor=${floorNum}`);
+    addLog('▌ ' + t('log.debug', { x: player.x, y: player.y, moving: player.isMoving ? 1 : 0, floor: floorNum }));
   }
 });
 
@@ -242,7 +244,7 @@ function handleInput() {
 
   const action = player.attemptMove(dx, dy, dungeon);
   if (!action) {
-    addLog('▌ Cannot move there.');
+    addLog('▌ ' + t('log.cannotMove'));
     return;
   }
 
@@ -254,7 +256,7 @@ function handleInput() {
   // Proximity hint — warn when close to exit
   const distToExit = Math.abs(action.x - dungeon.exitX) + Math.abs(action.y - dungeon.exitY);
 
-  addLog(`▌ Move to (${action.x}, ${action.y}) — ${describeTile(action.tileType, action.label)}`);
+  addLog('▌ ' + t('log.moveTo', { x: action.x, y: action.y, tile: describeTile(action.tileType, action.label) }));
 
   // Reveal fog around new position + true tile color
   revealAround(fogData.meshes, dungeon, dungeonMeshes,action.x, action.y, REVEAL_RADIUS);
@@ -265,23 +267,23 @@ function handleInput() {
     flashTimer = 0.3;
     if (floorNum >= MAX_FLOOR) {
       gameWon = true;
-      addLog('▌ You escaped the dungeon!');
+      addLog('▌ ' + t('log.escaped'));
       updateHUD();
       return;
     }
     floorNum++;
     regenerateDungeon();
-    addLog(`▌ Descended to Floor ${floorNum} / ${MAX_FLOOR}!`);
+    addLog('▌ ' + t('log.descended', { floor: floorNum, max: MAX_FLOOR }));
   } else if (player.hasShield && isHazardType(action.tileType)) {
     // Shield absorbs one hazard
     player.setShield(false);
     shieldBreakTimer = 0.4;
-    addLog('▌ Shield absorbed the effect!');
+    addLog('▌ ' + t('log.shieldAbsorbed'));
   } else if (action.tileType === TileType.Reset) {
     // Shrink → teleport to start → grow
     playerAnim = 'shrink';
     playerAnimTarget.set(0, PLAYER_Y, 0);
-    addLog('▌ Sent back to start!');
+    addLog('▌ ' + t('log.sentBack'));
   } else if (action.tileType === TileType.Teleport) {
     let tx: number, ty: number;
     do {
@@ -293,18 +295,18 @@ function handleInput() {
     playerAnimTarget.set(tp.x, PLAYER_Y, tp.z);
     // Deferred: reveal + reset after shrink completes (in animate)
     (player.mesh as any).__teleportTarget = { tx, ty };
-    addLog(`▌ Teleported to (${tx}, ${ty})!`);
+    addLog('▌ ' + t('log.teleported', { x: tx, y: ty }));
   } else if (action.tileType === TileType.RandomMap) {
     shakeTimer = 0.35;
     regenerateDungeon();
-    addLog('▌ The dungeon shifts around you...');
+    addLog('▌ ' + t('log.dungeonShifts'));
   } else if (action.tileType === TileType.Compass) {
     // Reveal the exit tile
     const ex = dungeon.exitX, ey = dungeon.exitY;
     dungeon.tiles[ey][ex].explored = true;
     fogData.meshes[ey][ex].visible = false;
     revealTile(dungeon, dungeonMeshes, ex, ey);
-    addLog(`▌ Exit located at (${ex}, ${ey})!`);
+    addLog('▌ ' + t('log.exitLocated', { x: ex, y: ey }));
   } else if (action.tileType === TileType.Scan) {
     // Reveal true colors in 3×3 area around player
     for (let sy = action.y - REVEAL_RADIUS; sy <= action.y + REVEAL_RADIUS; sy++) {
@@ -314,21 +316,16 @@ function handleInput() {
         }
       }
     }
-    addLog('▌ Scanned nearby area!');
+    addLog('▌ ' + t('log.scanned'));
   } else if (action.tileType === TileType.Shield) {
     player.setShield(true);
     playerScaleVel = 0.3; // brief pulse
-    addLog('▌ Gained a shield! Next hazard will be blocked.');
+    addLog('▌ ' + t('log.gainedShield'));
   }
 
   // Proximity hint after move (not on exit tile)
   if (action.tileType !== TileType.Exit && distToExit <= 2) {
-    const msgs = [
-      '▌ You feel a warm breeze... the exit is near.',
-      '▌ A faint glow emanates from nearby.',
-      '▌ The air feels different here. The exit is close.',
-    ];
-    addLog(msgs[Math.floor(Math.random() * msgs.length)]);
+    addLog('▌ ' + getProximityMessage(Math.floor(Math.random() * 3)));
   }
 
   updateHUD();
@@ -342,16 +339,16 @@ function isHazardType(type: TileType): boolean {
 
 function describeTile(type: TileType, label: string): string {
   switch (type) {
-    case TileType.Empty:     return label ? `Event ${label}` : 'Empty';
-    case TileType.Reset:     return 'Reset';
-    case TileType.Teleport:  return 'Teleport';
-    case TileType.RandomMap: return 'Random Map';
-    case TileType.Compass:   return 'Compass';
-    case TileType.Scan:      return 'Scan';
-    case TileType.Shield:    return 'Shield';
-    case TileType.Exit:      return 'Exit!';
-    case TileType.Start:     return 'Start';
-    default:                 return '?';
+    case TileType.Empty:     return label ? `${getTileName('empty')} ${label}` : getTileName('empty');
+    case TileType.Reset:     return getTileName('reset');
+    case TileType.Teleport:  return getTileName('teleport');
+    case TileType.RandomMap: return getTileName('randomMap');
+    case TileType.Compass:   return getTileName('compass');
+    case TileType.Scan:      return getTileName('scan');
+    case TileType.Shield:    return getTileName('shield');
+    case TileType.Exit:      return getTileName('exit');
+    case TileType.Start:     return getTileName('start');
+    default:                 return getTileName('unknown');
   }
 }
 
@@ -544,6 +541,9 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
+// ── i18n ─────────────────────────────────────────────────────
+initI18n();
+
 // ── Start overlay ────────────────────────────────────────────
 const overlay = document.getElementById('overlay')!;
 
@@ -553,6 +553,15 @@ function dismissOverlay() {
 }
 overlay.addEventListener('click', dismissOverlay);
 window.addEventListener('keydown', dismissOverlay, { once: true });
+
+// ── Language toggle ──────────────────────────────────────────
+const langToggle = document.getElementById('lang-toggle')!;
+langToggle.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const next = getLang() === 'en' ? 'zh' : 'en';
+  setLang(next);
+  regenerateDungeon();
+});
 
 // ── Exit beacon ───────────────────────────────────────────────
 let exitBeacon: THREE.Group | null = null;
