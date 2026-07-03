@@ -6,7 +6,7 @@
   <title>Gridmaze</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #d5dbe3; overflow: hidden; font-family: monospace; }
+    body { background: #d5dbe3; overflow: hidden; font-family: 'SF Mono', 'Menlo', 'Consolas', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', monospace; }
     canvas { display: block; }
 
     #hud {
@@ -59,7 +59,7 @@
       max-width: 420px;
       width: 90%;
       color: #cdd6f4;
-      font-family: monospace;
+      font-family: 'SF Mono', 'Menlo', 'Consolas', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', monospace;
       cursor: default;
     }
     #overlay-card h1 {
@@ -145,9 +145,19 @@
       flex-shrink: 0;
       border: 1px solid rgba(0,0,0,0.2);
     }
-    #legend .legend-effect {
-      color: #666;
-      font-size: 11px;
+    #lang-toggle {
+      background: rgba(240, 240, 245, 0.9);
+      border: 1px solid rgba(0,0,0,0.1);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-family: inherit;
+      font-size: 13px;
+      color: #111;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    #lang-toggle:hover {
+      background: rgba(255, 255, 255, 1);
     }
   </style>
 </head>
@@ -155,48 +165,53 @@
   <div id="overlay">
     <div id="overlay-card">
       <h1>Gridmaze</h1>
-      <div class="subtitle">Escape the dungeon!<br>Reach the <span style="color:#06d6a0">Exit ▨</span> on each floor to descend.<br>Clear all <b>99 floors</b> to win.</div>
+      <div class="subtitle" data-i18n-html="overlay.subtitle">Escape the dungeon!<br>Reach the <span style="color:#06d6a0">Exit ▨</span> on each floor to descend.<br>Clear all <b>99 floors</b> to win.</div>
 
-      <h3>▸ Controls</h3>
-      <p><b>WASD</b> / <b>Arrow Keys</b> — Move one tile<br>
+      <h3 data-i18n="overlay.controlsTitle">▸ Controls</h3>
+      <p data-i18n-html="overlay.controls"><b>WASD</b> / <b>Arrow Keys</b> — Move one tile<br>
          <b>Scroll</b> — Zoom · <b>Right-drag</b> — Rotate view<br>
          <b>Swipe</b> on mobile to move</p>
 
-      <h3>▸ Tile Types</h3>
+      <h3 data-i18n="overlay.tileTypesTitle">▸ Tile Types</h3>
       <div class="legend">
-        <span><span class="swatch" style="background:#06d6a0"></span> Exit</span>
-        <span><span class="swatch" style="background:#eeeeee"></span> Empty</span>
-        <span><span class="swatch" style="background:#1a1a2e"></span> Wall</span>
-        <span><span class="swatch" style="background:#457b9d"></span> ↺ Reset</span>
-        <span><span class="swatch" style="background:#9b5de5"></span> ↗ Teleport</span>
-        <span><span class="swatch" style="background:#e63946"></span> ? Random</span>
-        <span><span class="swatch" style="background:#f4a261"></span> ⌖ Compass</span>
-        <span><span class="swatch" style="background:#00bbf9"></span> ◎ Scan</span>
-        <span><span class="swatch" style="background:#ffd166"></span> ◈ Shield</span>
+        <span><span class="swatch" style="background:#06d6a0"></span> <span data-i18n="legend.exit">Exit</span></span>
+        <span><span class="swatch" style="background:#eeeeee"></span> <span data-i18n="legend.empty">Empty</span></span>
+        <span><span class="swatch" style="background:#1a1a2e"></span> <span data-i18n="legend.wall">Wall</span></span>
+        <span><span class="swatch" style="background:#457b9d"></span> <span data-i18n="legend.reset">↺ Reset</span></span>
+        <span><span class="swatch" style="background:#9b5de5"></span> <span data-i18n="legend.teleport">↗ Teleport</span></span>
+        <span><span class="swatch" style="background:#e63946"></span> <span data-i18n="legend.randomMap">? Random</span></span>
+        <span><span class="swatch" style="background:#f4a261"></span> <span data-i18n="legend.compass">⌖ Compass</span></span>
+        <span><span class="swatch" style="background:#00bbf9"></span> <span data-i18n="legend.scan">◎ Scan</span></span>
+        <span><span class="swatch" style="background:#ffd166"></span> <span data-i18n="legend.shield">◈ Shield</span></span>
       </div>
 
-      <div class="dismiss">Click anywhere to begin</div>
+      <div class="dismiss" data-i18n="overlay.dismiss">Click anywhere to begin</div>
     </div>
   </div>
 
   <div id="hud">
-    <div class="title">Gridmaze</div>
-    <div>Floor <span id="floor-num">1 / 99</span></div>
-    <div>Position <span class="coord" id="player-pos">0,0</span></div>
-    <div id="shield-indicator" style="color:#ffd166;opacity:0">◈ Shield active</div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+      <div>
+        <div class="title">Gridmaze</div>
+        <div><span data-i18n="ui.floor" data-i18n-default="Floor">Floor</span> <span id="floor-num">1 / 99</span></div>
+        <div><span data-i18n="ui.position">Position</span> <span class="coord" id="player-pos">0,0</span></div>
+        <div id="shield-indicator" style="color:#ffd166;opacity:0" data-i18n="ui.shieldActive">Shield active</div>
+      </div>
+      <button id="lang-toggle" data-i18n="ui.langButton">中 / EN</button>
+    </div>
   </div>
 
   <div id="legend">
-    <div class="legend-title">Tile Types</div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#06d6a0"></span> Exit</div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#eeeeee"></span> Empty</div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#1a1a2e"></span> Wall</div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#457b9d"></span> ↺ Reset <span class="legend-effect">→start</span></div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#9b5de5"></span> ↗ Teleport</div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#e63946"></span> ? Random <span class="legend-effect">reshuffle</span></div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#f4a261"></span> ⌖ Compass <span class="legend-effect">→exit</span></div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#00bbf9"></span> ◎ Scan <span class="legend-effect">nearby</span></div>
-    <div class="legend-row"><span class="legend-swatch" style="background:#ffd166"></span> ◈ Shield <span class="legend-effect">block 1</span></div>
+    <div class="legend-title" data-i18n="legend.title">Tile Types</div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#06d6a0"></span> <span data-i18n="legend.exit">Exit</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#eeeeee"></span> <span data-i18n="legend.empty">Empty</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#1a1a2e"></span> <span data-i18n="legend.wall">Wall</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#457b9d"></span> <span data-i18n="legend.reset">Reset</span> <span class="legend-effect" data-i18n="legend.resetEffect">→start</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#9b5de5"></span> <span data-i18n="legend.teleport">Teleport</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#e63946"></span> <span data-i18n="legend.randomMap">Random</span> <span class="legend-effect" data-i18n="legend.randomMapEffect">reshuffle</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#f4a261"></span> <span data-i18n="legend.compass">Compass</span> <span class="legend-effect" data-i18n="legend.compassEffect">→exit</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#00bbf9"></span> <span data-i18n="legend.scan">Scan</span> <span class="legend-effect" data-i18n="legend.scanEffect">nearby</span></div>
+    <div class="legend-row"><span class="legend-swatch" style="background:#ffd166"></span> <span data-i18n="legend.shield">Shield</span> <span class="legend-effect" data-i18n="legend.shieldEffect">block 1</span></div>
   </div>
 
   <div id="log"></div>
