@@ -1,6 +1,6 @@
 import { TileType, DungeonData } from '../types';
 import { CONFIG, isHazardType } from './config';
-import { generateDungeon, getTileAt } from './generation';
+import { generateDungeon, getTileAt, hasPath } from './generation';
 import type { RNG } from './rng';
 
 // ── State ───────────────────────────────────────────────────────────
@@ -166,15 +166,18 @@ export function processMove(
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function findRandomEmptyTile(dungeon: DungeonData, rng: RNG): { x: number; y: number } {
+  const grid = dungeon.tiles.map(row => row.map(t => t.type));
+  const { exitX, exitY, width, height } = dungeon;
   const candidates: { x: number; y: number }[] = [];
-  for (let y = 0; y < dungeon.height; y++) {
-    for (let x = 0; x < dungeon.width; x++) {
-      if (dungeon.tiles[y][x].type !== TileType.Wall) {
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (dungeon.tiles[y][x].type !== TileType.Wall
+          && hasPath(grid, width, height, x, y, exitX, exitY)) {
         candidates.push({ x, y });
       }
     }
   }
-  // Fallback: should never happen since the safety path guarantees at least one empty
+  // Fallback: safety path guarantees at least the start tile is reachable
   if (candidates.length === 0) return { x: 0, y: 0 };
   return candidates[rng.nextInt(candidates.length)];
 }
