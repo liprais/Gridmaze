@@ -9,7 +9,7 @@ import type { EngineState } from '../game/engine';
 
 /** Helper: create a minimal test dungeon */
 function makeTestDungeon(overrides?: Partial<{
-  tiles: Partial<{ type: TileType; steppedOn: boolean; explored: boolean; label: string; consumed: boolean }>[][];
+  tiles: Partial<{ type: TileType; steppedOn: boolean; explored: boolean; label: string; consumed: boolean; originalType: TileType | null }>[][];
   exitX: number;
   exitY: number;
   coreX: number;
@@ -28,6 +28,7 @@ function makeTestDungeon(overrides?: Partial<{
       explored: false,
       steppedOn: false,
       consumed: false,
+      originalType: null,
     })),
   );
   // Apply per-tile overrides

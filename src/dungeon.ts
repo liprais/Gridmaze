@@ -6,7 +6,7 @@ import { getTileLabel } from './i18n';
 export { generateDungeon, getTileAt, hasPath, isPassable, randomTileType, tileLabel } from './game/generation';
 
 export const COLORS: Record<TileType, number> = {
-  [TileType.Empty]:     0xeeeeee,
+  [TileType.Empty]:     0xd0d0d0,
   [TileType.Reset]:     0x457b9d,
   [TileType.Teleport]:  0x9b5de5,
   [TileType.RandomMap]: 0xe63946,
@@ -107,32 +107,51 @@ export function disposeLabelGroup(group: THREE.Group): void {
   });
 }
 
-/** Shared helper: create a label sprite with dark background circle for contrast */
-function createLabelSprite(label: string, x: number, y: number): THREE.Sprite {
+/** Shared helper: create a label sprite directly printed on the tile.
+ *  No background circle — the tile's own color provides contrast.
+ *  `prominent` keeps hazard + exit labels at full size + opacity so they
+ *  survive the shrink and stay legible when surrounded by quieter reward tiles. */
+function createLabelSprite(
+  label: string,
+  x: number,
+  y: number,
+  prominent: boolean = false,
+): THREE.Sprite {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 128;
   const ctx = canvas.getContext('2d')!;
 
-  // Dark background circle for visibility on grey tiles
-  ctx.beginPath();
-  ctx.arc(64, 64, 42, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(10, 10, 20, 0.6)';
-  ctx.fill();
-
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 52px monospace';
+  ctx.font = 'bold 36px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(label, 64, 64);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.minFilter = THREE.LinearFilter;
-  const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+  const mat = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    opacity: prominent ? 1.0 : 0.7,
+    depthTest: false,
+  });
   const sprite = new THREE.Sprite(mat);
   sprite.position.set(x * TILE_SIZE, 0.4, y * TILE_SIZE);
-  sprite.scale.set(0.85, 0.85, 1);
+  sprite.scale.set(prominent ? 0.7 : 0.55, prominent ? 0.7 : 0.55, 1);
   return sprite;
+}
+
+/** Hazard + Exit tiles use the prominent variant. Reward tiles (Compass /
+ *  Scan / Shield) print quietly so a Scan-revealed floor doesn't read as a
+ *  wall of labels. */
+function isProminentLabelType(type: TileType): boolean {
+  return (
+    type === TileType.Reset ||
+    type === TileType.Teleport ||
+    type === TileType.RandomMap ||
+    type === TileType.Exit
+  );
 }
 
 function buildLabels(dungeon: DungeonData): { group: THREE.Group; sprites: (THREE.Sprite | null)[][] } {
@@ -148,7 +167,7 @@ function buildLabels(dungeon: DungeonData): { group: THREE.Group; sprites: (THRE
         continue;
       }
 
-      const sprite = createLabelSprite(tile.label, x, y);
+      const sprite = createLabelSprite(tile.label, x, y, isProminentLabelType(tile.type));
       group.add(sprite);
       row.push(sprite);
     }
@@ -175,13 +194,16 @@ export function revealTile(
 
   // Add label sprite if there is one
   if (tile.label && !meshes.labelSprites[y][x]) {
-    const sprite = createLabelSprite(tile.label, x, y);
+    const sprite = createLabelSprite(tile.label, x, y, isProminentLabelType(tile.type));
     meshes.labels.add(sprite);
     meshes.labelSprites[y][x] = sprite;
   }
 }
 
-/** Update a consumed reward tile to look like an empty tile. */
+/** Update a consumed reward tile to look "spent" — its color desaturates toward
+ *  mid-grey, and its label icon dims to 40% opacity, so the player still
+ *  recognises what it used to be. Gameplay-wise the tile is now Empty (set by
+ *  the engine), but visually it carries its former identity as a memory cue. */
 export function consumeTileVisuals(
   dungeon: DungeonData,
   meshes: DungeonMeshes,
@@ -189,19 +211,19 @@ export function consumeTileVisuals(
   y: number,
 ): void {
   const tile = dungeon.tiles[y][x];
-  tile.type = TileType.Empty;
-  tile.label = '';
+  const originalType = tile.originalType ?? tile.type;
 
   const mesh = meshes.tiles[y][x];
-  (mesh.material as THREE.MeshStandardMaterial).color.set(COLORS[TileType.Empty]);
+  const original = new THREE.Color(COLORS[originalType]);
+  const grey = new THREE.Color(0x888888);
+  (mesh.material as THREE.MeshStandardMaterial).color.copy(original.lerp(grey, 0.65));
 
+  // Dim the existing label sprite (it was created when the player stepped on
+  // the tile, so the canvas texture already carries the original glyph).
   const sprite = meshes.labelSprites[y][x];
   if (sprite) {
-    meshes.labels.remove(sprite);
     const mat = sprite.material as THREE.SpriteMaterial;
-    if (mat.map) mat.map.dispose();
-    mat.dispose();
-    meshes.labelSprites[y][x] = null;
+    mat.opacity = 0.4;
   }
 }
 
@@ -277,7 +299,7 @@ export function showLabel(
   if (!tile.label) return;
   if (meshes.labelSprites[y][x]) return;
 
-  const sprite = createLabelSprite(tile.label, x, y);
+  const sprite = createLabelSprite(tile.label, x, y, isProminentLabelType(tile.type));
   meshes.labels.add(sprite);
   meshes.labelSprites[y][x] = sprite;
 }
@@ -370,5 +392,74 @@ export function createHazardWarning(x: number, y: number): THREE.Mesh {
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.set(x * TILE_SIZE, 0.28, y * TILE_SIZE);
   mesh.userData = { baseY: 0.28 };
+  return mesh;
+}
+
+/** Create a soft gold halo that hints at a hidden core tile when the player
+ *  gets within proximity. Calmer than createHazardWarning: thinner ring,
+ *  lower emissive, lower opacity, gold instead of red. The animation in
+ *  main.ts pulses the emissive intensity for the "you're close" feel. */
+export function createCoreHint(x: number, y: number): THREE.Mesh {
+  const geo = new THREE.TorusGeometry(0.45, 0.025, 10, 24);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xffd166,
+    emissive: 0xffd166,
+    emissiveIntensity: 0.5,
+    transparent: true,
+    opacity: 0.55,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(x * TILE_SIZE, 0.18, y * TILE_SIZE);
+  mesh.userData = { baseY: 0.18, kind: 'coreHint' };
+  return mesh;
+}
+
+/** Small gold diamond glyph floating above the core tile. Pairs with
+ *  createCoreHint so the player can read "there's a core here" — not just
+ *  "there's something here". Same lifecycle as the ring: shown together,
+ *  disposed together. */
+export function createCoreIcon(x: number, y: number): THREE.Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#ffd166';
+  ctx.font = 'bold 64px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('◆', 64, 64);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 0.95,
+    depthTest: false,
+  });
+  const sprite = new THREE.Sprite(mat);
+  sprite.position.set(x * TILE_SIZE, 0.45, y * TILE_SIZE);
+  sprite.scale.set(0.4, 0.4, 1);
+  sprite.userData = { baseY: 0.45, kind: 'coreIcon' };
+  return sprite;
+}
+
+/** Purple ring that expands and fades. Spawned at the teleport source and
+ *  destination to mark vanish + appear points. The animation in main.ts
+ *  drives scale (0.4 → 1.4) and opacity (1.0 → 0) over the puff lifetime. */
+export function createTeleportPuff(x: number, y: number): THREE.Mesh {
+  const geo = new THREE.TorusGeometry(0.3, 0.04, 12, 24);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x9b5de5,
+    emissive: 0x9b5de5,
+    emissiveIntensity: 1.4,
+    transparent: true,
+    opacity: 1.0,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(x * TILE_SIZE, 0.25, y * TILE_SIZE);
+  mesh.userData = { baseY: 0.25, kind: 'teleportPuff' };
   return mesh;
 }

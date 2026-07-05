@@ -37,15 +37,21 @@ export const CONFIG = {
     /** Return floor-scaled weights. Higher floors = more walls & hazards, fewer rewards. */
     scaledForFloor(floor: number): Array<{ type: TileType; weight: number }> {
       const t = (floor - 1) / (CONFIG.dungeon.maxFloor - 1); // 0..1
+      // Floor 1 baseline halves the special-tile density vs the previous
+      // (Reset/Teleport 18→9, RandomMap 8→4, Compass/Scan/Shield 6→3) and
+      // compensates with +31 on Empty so the total weight is unchanged and
+      // the per-floor special count lands in the 18-25 target window for a
+      // 12×12 map. Floor scaling coefficients are preserved so higher floors
+      // still tilt toward hazards.
       return [
-        { type: TileType.Empty,     weight: Math.max(5, 40 - Math.floor(t * 25)) },
+        { type: TileType.Empty,     weight: Math.max(5, 71 - Math.floor(t * 25)) },
         { type: TileType.Wall,      weight: 10 + Math.floor(t * 30) },
-        { type: TileType.Reset,     weight: 18 + Math.floor(t * 12) },
-        { type: TileType.Teleport,  weight: 18 + Math.floor(t * 12) },
-        { type: TileType.RandomMap, weight: 8 + Math.floor(t * 20) },
-        { type: TileType.Compass,   weight: Math.max(2, 6 - Math.floor(t * 3)) },
-        { type: TileType.Scan,      weight: Math.max(2, 6 - Math.floor(t * 3)) },
-        { type: TileType.Shield,    weight: Math.max(2, 6 - Math.floor(t * 3)) },
+        { type: TileType.Reset,     weight: 9 + Math.floor(t * 12) },
+        { type: TileType.Teleport,  weight: 9 + Math.floor(t * 12) },
+        { type: TileType.RandomMap, weight: 4 + Math.floor(t * 20) },
+        { type: TileType.Compass,   weight: Math.max(1, 3 - Math.floor(t * 3)) },
+        { type: TileType.Scan,      weight: Math.max(1, 3 - Math.floor(t * 3)) },
+        { type: TileType.Shield,    weight: Math.max(1, 3 - Math.floor(t * 3)) },
       ];
     },
   },

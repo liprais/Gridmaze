@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TileType, RelicId } from './types';
-import { createDungeonMesh, createFogOverlay, revealAround, revealTile, revealAll, tileToWorld, disposeDungeonMeshes, disposeFogOverlay, rebuildAllLabels, consumeTileVisuals, createHazardWarning } from './dungeon';
+import { createDungeonMesh, createFogOverlay, revealAround, revealTile, revealAll, tileToWorld, disposeDungeonMeshes, disposeFogOverlay, rebuildAllLabels, consumeTileVisuals, createHazardWarning, createCoreHint, createCoreIcon, createTeleportPuff } from './dungeon';
 import type { DungeonMeshes } from './dungeon';
 import { Player, PLAYER_Y } from './player';
 import { init as initI18n, setLang, getLang, t, getTileLabel, getTileName, getProximityMessage, refreshTileLabels } from './i18n';
@@ -232,6 +232,30 @@ const relicCards = document.getElementById('relic-cards')!;
 const relicRefresh = document.getElementById('relic-refresh')!;
 const chapterCompleteOverlay = document.getElementById('chapter-complete-overlay')!;
 const chapterRestartBtn = document.getElementById('chapter-restart')!;
+const chapterFailedOverlay = document.getElementById('chapter-failed-overlay')!;
+
+function isChapterFailedOverlayVisible(): boolean {
+  return !chapterFailedOverlay.classList.contains('hidden');
+}
+
+function dismissChapterFailedOverlay(): void {
+  hideChapterFailedOverlay();
+  chapterRestartPending = false;
+  chapterFailFadeTimer = 0;
+  shakeTimer = 0;
+  shieldBreakTimer = 0;
+  scene.background = new THREE.Color(0xd5dbe3);
+  restartChapter();
+}
+
+window.addEventListener('keydown', (e) => {
+  // Ignore modifier-only and browser-reserved combos so the player can still
+  // use Cmd-R / F5 / etc. without triggering a restart.
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (!isChapterFailedOverlayVisible()) return;
+  e.preventDefault();
+  dismissChapterFailedOverlay();
+});
 
 function showRelicChoice(event: Extract<GameEvent, { kind: 'relic_choice' }>) {
   relicCards.innerHTML = '';
@@ -277,6 +301,14 @@ function showChapterCompleteOverlay() {
 
 function hideChapterCompleteOverlay() {
   chapterCompleteOverlay.classList.add('hidden');
+}
+
+function showChapterFailedOverlay() {
+  chapterFailedOverlay.classList.remove('hidden');
+}
+
+function hideChapterFailedOverlay() {
+  chapterFailedOverlay.classList.add('hidden');
 }
 
 chapterRestartBtn.addEventListener('click', () => {
@@ -330,24 +362,59 @@ function dispatchEvent(event: GameEvent) {
       addLog('▌ ' + t('log.shieldAbsorbed'));
       break;
 
-    case 'reset_to_start':
-      playerAnim = 'shrink';
-      playerAnimTarget.set(0, PLAYER_Y, 0);
+    case 'reset_to_start': {
+      // The Reset tile pops up (a tile mesh bounce on the source cell) and
+      // the player is launched in an arc back to (0,0). Replaces the old
+      // shrink→teleport→grow chain with a visible flight.
+      const fromWorld = tileToWorld(event.fromX, event.fromY);
+      playerFlight = {
+        fromX: fromWorld.x,
+        fromZ: fromWorld.z,
+        duration: 0.7,
+        elapsed: 0,
+      };
+      resetTileBounceTimer = 0.35;
+      resetTileBounceX = event.fromX;
+      resetTileBounceY = event.fromY;
       addLog('▌ ' + t('log.sentBack'));
       break;
+    }
 
     case 'teleported': {
-      const tp = tileToWorld(event.toX, event.toY);
-      playerAnim = 'shrink';
-      playerAnimTarget.set(tp.x, PLAYER_Y, tp.z);
-      (player.mesh as any).__teleportTarget = { tx: event.toX, ty: event.toY };
+      // Two-phase vanish + appear: shrink player at source while a purple
+      // puff expands, snap to destination, then grow player back while a
+      // second puff expands. Total ~0.55s, blocked from new input.
+      const fromWorld = tileToWorld(event.fromX, event.fromY);
+      const toWorld = tileToWorld(event.toX, event.toY);
+      teleportState = {
+        fromX: fromWorld.x, fromZ: fromWorld.z,
+        toX: toWorld.x, toZ: toWorld.z,
+        fromTileX: event.fromX, fromTileY: event.fromY,
+        toTileX: event.toX, toTileY: event.toY,
+        phase: 'vanish',
+        elapsed: 0,
+        vanishDur: 0.25,
+        appearDur: 0.3,
+      };
+      teleportPuffSource = {
+        mesh: createTeleportPuff(event.fromX, event.fromY),
+        elapsed: 0,
+        duration: 0.45,
+      };
+      scene.add(teleportPuffSource.mesh);
       addLog('▌ ' + t('log.teleported', { x: event.toX, y: event.toY }));
       break;
     }
 
     case 'map_regenerated':
-      shakeTimer = 0.35;
-      regenerateDungeonMesh();
+      // Long dramatic sequence: darken the old map, swap the dungeon while
+      // the scene is at peak darkness, then fade back to the new map. Mirror
+      // the chapter-fail structure but without an overlay — the player is
+      // teleported to (0,0) and just resumes.
+      shakeTimer = 1.5;
+      shieldBreakTimer = 1.5;
+      mapRegenFadeTimer = 1.5;
+      mapRegenTriggered = false;
       addLog('▌ ' + t('log.dungeonShifts'));
       break;
 
@@ -377,14 +444,23 @@ function dispatchEvent(event: GameEvent) {
       addLog('▌ ' + t('log.consumedTile'));
       break;
 
+    case 'core_collected':
+      // Brief cyan flash + small player pulse so the player feels the
+      // pick-up. Stops feeling like a silent counter increment.
+      coreCollectedTimer = 0.5;
+      addLog('▌ ' + t('log.coreCollected'));
+      break;
+
     case 'chapter_failed':
-      shakeTimer = 0.5;
-      shieldBreakTimer = 0.5;
+      // Long dramatic sequence: 1.5s of shake + screen-darken, then the
+      // chapter-failed overlay takes over and the player clicks Restart.
+      shakeTimer = 1.5;
+      shieldBreakTimer = 1.5;
+      chapterFailFadeTimer = 1.5;
       addLog('▌ ' + t('log.chapterFailed'));
       chapterRestartPending = true;
       setTimeout(() => {
-        restartChapter();
-        chapterRestartPending = false;
+        showChapterFailedOverlay();
       }, 1500);
       break;
 
@@ -413,7 +489,7 @@ function getTileNameForEvent(type: TileType, label: string): string {
 // ── Input handling ───────────────────────────────────────────
 
 function handleInput() {
-  if (player.isMoving || gameState.gameWon || playerAnim !== 'none' || chapterRestartPending) return;
+  if (player.isMoving || gameState.gameWon || playerAnim !== 'none' || playerFlight !== null || teleportState !== null || chapterRestartPending) return;
 
   let inputX = 0, inputY = 0;
   if (keys.has('w') || keys.has('arrowup'))    inputY += 1;
@@ -490,6 +566,63 @@ function clearHazardWarnings(): void {
   }
 }
 
+// ── Core proximity hint ─────────────────────────────────────────
+// Shows a soft gold halo + ◆ glyph above the hidden core when the player
+// gets close (chebyshev ≤ 2). Once collected (or on chapter restart /
+// dungeon regen) the hint is removed. One ring + one sprite, paired.
+
+let coreHintMesh: THREE.Mesh | null = null;
+let coreIconSprite: THREE.Sprite | null = null;
+
+function disposeCoreHint(): void {
+  if (coreHintMesh) {
+    scene.remove(coreHintMesh);
+    disposeHazardWarning(coreHintMesh); // same shape: dispose geom + mat
+    coreHintMesh = null;
+  }
+  if (coreIconSprite) {
+    scene.remove(coreIconSprite);
+    const mat = coreIconSprite.material as THREE.SpriteMaterial;
+    if (mat.map) mat.map.dispose();
+    mat.dispose();
+    coreIconSprite = null;
+  }
+}
+
+function updateCoreHint(): void {
+  if (gameState.coreCollectedThisFloor) {
+    disposeCoreHint();
+    return;
+  }
+  const cx = gameState.dungeon.coreX;
+  const cy = gameState.dungeon.coreY;
+  const dx = Math.abs(gameState.playerX - cx);
+  const dy = Math.abs(gameState.playerY - cy);
+  if (dx > 2 || dy > 2) {
+    disposeCoreHint();
+    return;
+  }
+  if (!coreHintMesh) {
+    coreHintMesh = createCoreHint(cx, cy);
+    scene.add(coreHintMesh);
+  }
+  if (!coreIconSprite) {
+    coreIconSprite = createCoreIcon(cx, cy);
+    scene.add(coreIconSprite);
+  }
+  // Animate the hint (cheap pulse so the player notices it without it
+  // becoming a hazard-warning-level siren). Icon bobs gently above.
+  const elapsed = clock.elapsedTime;
+  coreHintMesh.scale.setScalar(1 + Math.sin(elapsed * 2.2) * 0.08);
+  coreHintMesh.position.y = coreHintMesh.userData.baseY + Math.sin(elapsed * 1.8) * 0.02;
+  const mat = coreHintMesh.material as THREE.MeshStandardMaterial;
+  mat.emissiveIntensity = 0.4 + (1 - Math.max(dx, dy) / 3) * 0.6;
+
+  const iconMat = coreIconSprite.material as THREE.SpriteMaterial;
+  iconMat.opacity = 0.7 + (1 - Math.max(dx, dy) / 3) * 0.25;
+  coreIconSprite.position.y = coreIconSprite.userData.baseY + Math.sin(elapsed * 2.5) * 0.04;
+}
+
 function restartChapter(): void {
   const savedRelics = [...gameState.relics];
   gameState = createInitialState(rng);
@@ -556,6 +689,26 @@ function disposeBeacon(beacon: THREE.Group): void {
 }
 
 function regenerateDungeonMesh() {
+  // Mark the map-regen V-shape as "triggered" so a partial animation can't
+  // double-regenerate if some other event calls this function mid-animation.
+  mapRegenTriggered = true;
+  // Cancel any in-flight reset animation — the new dungeon doesn't have the
+  // source tile anymore, and the player has already been reset by the caller.
+  playerFlight = null;
+  resetTileBounceTimer = 0;
+  teleportState = null;
+  if (teleportPuffSource) {
+    scene.remove(teleportPuffSource.mesh);
+    disposeHazardWarning(teleportPuffSource.mesh);
+    teleportPuffSource = null;
+  }
+  if (teleportPuffDest) {
+    scene.remove(teleportPuffDest.mesh);
+    disposeHazardWarning(teleportPuffDest.mesh);
+    teleportPuffDest = null;
+  }
+  player.mesh.scale.set(1, 1, 1);
+
   disposeDungeonMeshes(dungeonMeshes);
   disposeFogOverlay(fogData);
   scene.remove(dungeonMeshes.group);
@@ -570,6 +723,7 @@ function regenerateDungeonMesh() {
   }
 
   clearHazardWarnings();
+  disposeCoreHint();
 
   dungeonMeshes = createDungeonMesh(gameState.dungeon);
   fogData = createFogOverlay(gameState.dungeon);
@@ -618,6 +772,27 @@ let shakeTimer = 0;
 let shakeOffset = new THREE.Vector3();
 let flashTimer = 0;
 let shieldBreakTimer = 0;
+let coreCollectedTimer = 0;
+let chapterFailFadeTimer = 0;
+let mapRegenFadeTimer = 0;
+let mapRegenTriggered = false;
+let resetTileBounceTimer = 0;
+let resetTileBounceX = 0;
+let resetTileBounceY = 0;
+let playerFlight: { fromX: number; fromZ: number; duration: number; elapsed: number } | null = null;
+let teleportState: {
+  fromX: number; fromZ: number;
+  toX: number; toZ: number;
+  fromTileX: number; fromTileY: number;
+  toTileX: number; toTileY: number;
+  phase: 'vanish' | 'appear';
+  elapsed: number;
+  vanishDur: number;
+  appearDur: number;
+} | null = null;
+type TeleportPuff = { mesh: THREE.Mesh; elapsed: number; duration: number };
+let teleportPuffSource: TeleportPuff | null = null;
+let teleportPuffDest: TeleportPuff | null = null;
 let playerAnim: 'none' | 'shrink' | 'grow' = 'none';
 let playerAnimTarget = new THREE.Vector3();
 let playerScaleVel = 0;
@@ -640,6 +815,7 @@ function animate() {
 
     // Update hazard warnings (unstable zone only)
     updateHazardWarnings();
+    updateCoreHint();
     const elapsed = clock.elapsedTime;
     for (const mesh of hazardWarnings.values()) {
       const pulse = 1 + Math.sin(elapsed * 4) * 0.12;
@@ -700,6 +876,139 @@ function animate() {
         new THREE.Color(0xd5dbe3), new THREE.Color(0xffd166), a);
       const pulse = 1 + Math.sin((0.4 - shieldBreakTimer) * 20) * 0.2 * a;
       player.mesh.scale.setScalar(pulse);
+    }
+
+    if (coreCollectedTimer > 0) {
+      coreCollectedTimer -= dt;
+      const a = Math.min(coreCollectedTimer / 0.3, 1);
+      // Cyan flash: lifts the dungeon off the page for half a second.
+      scene.background = new THREE.Color().lerpColors(
+        new THREE.Color(0xd5dbe3), new THREE.Color(0x9bd4ff), a);
+    } else if (shieldBreakTimer <= 0) {
+      scene.background = new THREE.Color(0xd5dbe3);
+    }
+
+    // Chapter-fail fade: darkens the scene over 1.5s as the long animation
+    // plays. Takes priority over the other flash effects so the collapse is
+    // visually unmissable.
+    if (chapterFailFadeTimer > 0) {
+      chapterFailFadeTimer -= dt;
+      const t = 1 - Math.max(chapterFailFadeTimer / 1.5, 0);
+      scene.background = new THREE.Color().lerpColors(
+        new THREE.Color(0xd5dbe3), new THREE.Color(0x0a0a14), t);
+    }
+
+    // Map-regen fade: V-shape darken → regenerate at peak dark → fade back.
+    // Placed before chapter-fail so chapter-fail still wins when both are
+    // active (chapter-fail is the worse state and should never be overridden).
+    if (mapRegenFadeTimer > 0) {
+      mapRegenFadeTimer -= dt;
+      const t = 1 - Math.max(mapRegenFadeTimer / 1.5, 0); // 0 → 1 across the 1.5s
+      // Regenerate the dungeon the instant we hit peak darkness, hidden from
+      // the viewer. After this the player mesh snaps to (0,0) and the new
+      // dungeon is visible behind the fade-in.
+      if (!mapRegenTriggered && t >= 0.5) {
+        regenerateDungeonMesh();
+        mapRegenTriggered = true;
+      }
+      // Triangle wave: 0 → 0.5 darkens, 0.5 → 1 lightens.
+      const darkness = t <= 0.5 ? t * 2 : (1 - t) * 2;
+      scene.background = new THREE.Color().lerpColors(
+        new THREE.Color(0xd5dbe3), new THREE.Color(0x0a0a14), darkness);
+    }
+
+    // Teleport effect: two-phase vanish + appear with expanding purple puffs.
+    if (teleportState) {
+      teleportState.elapsed += dt;
+      if (teleportState.phase === 'vanish') {
+        const t = Math.min(teleportState.elapsed / teleportState.vanishDur, 1);
+        player.mesh.position.set(teleportState.fromX, PLAYER_Y, teleportState.fromZ);
+        // Shrink to zero so the "vanish" reads as a pop.
+        const s = 1 - t;
+        player.mesh.scale.set(s, s, s);
+        if (t >= 1) {
+          teleportState.phase = 'appear';
+          teleportState.elapsed = 0;
+          player.mesh.position.set(teleportState.toX, PLAYER_Y, teleportState.toZ);
+          teleportPuffDest = {
+            mesh: createTeleportPuff(teleportState.toTileX, teleportState.toTileY),
+            elapsed: 0,
+            duration: 0.45,
+          };
+          scene.add(teleportPuffDest.mesh);
+        }
+      } else {
+        const t = Math.min(teleportState.elapsed / teleportState.appearDur, 1);
+        player.mesh.position.set(teleportState.toX, PLAYER_Y, teleportState.toZ);
+        // Grow from zero with a tiny overshoot so the "appear" pops.
+        const s = t < 0.7 ? t / 0.7 : 1 + (1 - t) / 0.3 * 0.15;
+        player.mesh.scale.set(s, s, s);
+        if (t >= 1) {
+          player.mesh.scale.set(1, 1, 1);
+          teleportState = null;
+          // Teleport already updated gameState.playerX/Y to the destination
+          // tile, so reveal from there.
+          revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, gameState.playerX, gameState.playerY, CONFIG.dungeon.revealRadius, getChapterRules(gameState.floor).showAdjacentWalls);
+          revealTile(gameState.dungeon, dungeonMeshes, gameState.playerX, gameState.playerY);
+          updateHUD();
+        }
+      }
+    }
+
+    // Teleport puffs: scale up + fade out over their duration.
+    const updatePuff = (puff: TeleportPuff | null) => {
+      if (!puff) return null;
+      puff.elapsed += dt;
+      const t = Math.min(puff.elapsed / puff.duration, 1);
+      const scale = 1 + t * 3;
+      puff.mesh.scale.set(scale, scale, 1);
+      const mat = puff.mesh.material as THREE.MeshStandardMaterial;
+      mat.opacity = 1 - t;
+      mat.emissiveIntensity = 1.4 * (1 - t);
+      if (t >= 1) {
+        scene.remove(puff.mesh);
+        disposeHazardWarning(puff.mesh);
+        return null;
+      }
+      return puff;
+    };
+    teleportPuffSource = updatePuff(teleportPuffSource);
+    teleportPuffDest = updatePuff(teleportPuffDest);
+
+    // Reset tile bounce: the source tile pops up briefly as the visual cue
+    // that the player is being launched back to start.
+    if (resetTileBounceTimer > 0) {
+      resetTileBounceTimer -= dt;
+      const t = 1 - Math.max(resetTileBounceTimer / 0.35, 0);
+      // Fast up, slower settle — sin curve biased toward the back half.
+      const bounce = Math.sin(t * Math.PI) * 0.45 * (1 - t * 0.3);
+      const tileMesh = dungeonMeshes.tiles[resetTileBounceY]?.[resetTileBounceX];
+      if (tileMesh) tileMesh.position.y = bounce;
+      if (resetTileBounceTimer <= 0) {
+        if (tileMesh) tileMesh.position.y = 0;
+      }
+    }
+
+    // Player flight (reset_to_start): parabolic arc from the source tile to
+    // (0,0) with a slight squash/stretch. Replaces the old shrink-teleport-
+    // grow chain so the "sent back" event reads as motion, not a jump cut.
+    if (playerFlight) {
+      playerFlight.elapsed += dt;
+      const t = Math.min(playerFlight.elapsed / playerFlight.duration, 1);
+      const newX = playerFlight.fromX + (0 - playerFlight.fromX) * t;
+      const newZ = playerFlight.fromZ + (0 - playerFlight.fromZ) * t;
+      const arc = Math.sin(t * Math.PI) * 1.4;
+      player.mesh.position.set(newX, PLAYER_Y + arc, newZ);
+      const stretch = 1 + Math.sin(t * Math.PI) * 0.18;
+      player.mesh.scale.set(stretch, 1 / Math.sqrt(stretch), stretch);
+      if (t >= 1) {
+        playerFlight = null;
+        player.resetPosition(0, 0);
+        player.mesh.scale.set(1, 1, 1);
+        revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, 0, 0, CONFIG.dungeon.revealRadius, getChapterRules(gameState.floor).showAdjacentWalls);
+        revealTile(gameState.dungeon, dungeonMeshes, 0, 0);
+        updateHUD();
+      }
     }
 
     // Player shrink/grow animation

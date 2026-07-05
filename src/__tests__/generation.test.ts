@@ -63,7 +63,7 @@ describe('weights', () => {
   it('floor 1 weights match base weights', () => {
     const w = CONFIG.weights.scaledForFloor(1);
     expect(w.length).toBe(8);
-    expect(w.find(x => x.type === TileType.Empty)!.weight).toBe(40);
+    expect(w.find(x => x.type === TileType.Empty)!.weight).toBe(71);
     expect(w.find(x => x.type === TileType.Wall)!.weight).toBe(10);
   });
 

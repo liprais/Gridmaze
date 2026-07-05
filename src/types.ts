@@ -19,6 +19,9 @@ export interface Tile {
   explored: boolean;   // fog removed
   steppedOn: boolean;  // player has walked on it → show true color
   consumed: boolean;   // one-time reward tile has been used
+  originalType: TileType | null; // pre-consume type, so the tile can still
+                                 //   display its former identity (grey color +
+                                 //   dimmed icon) after the effect is spent.
 }
 
 export interface DungeonData {

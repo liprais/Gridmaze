@@ -62,7 +62,7 @@ export type GameEvent =
   | { kind: 'blocked'; x: number; y: number }
   | { kind: 'exit_reached'; floorCleared: boolean; newFloor: number }
   | { kind: 'hazard_absorbed'; tileType: TileType }
-  | { kind: 'reset_to_start' }
+  | { kind: 'reset_to_start'; fromX: number; fromY: number }
   | { kind: 'teleported'; fromX: number; fromY: number; toX: number; toY: number }
   | { kind: 'map_regenerated' }
   | { kind: 'compass_revealed'; exitX: number; exitY: number }
@@ -174,7 +174,7 @@ export function processMove(
       next.playerX = 0;
       next.playerY = 0;
       next.resetsThisChapter++;
-      events.push({ kind: 'reset_to_start' });
+      events.push({ kind: 'reset_to_start', fromX: nx, fromY: ny });
       if (shouldResetCostStability(next.relics, next.resetsThisChapter - 1)) {
         next.stability = Math.max(0, next.stability - 1);
         events.push({ kind: 'stability_lost', amount: 1, remaining: next.stability });
@@ -262,9 +262,11 @@ function pickRelicOptions(owned: RelicId[], cores: number, rng: RNG): RelicId[] 
 // ── Helpers ─────────────────────────────────────────────────────────
 
 function consumeTile(dungeon: DungeonData, x: number, y: number, events: GameEvent[]): void {
-  dungeon.tiles[y][x].consumed = true;
-  dungeon.tiles[y][x].type = TileType.Empty;
-  dungeon.tiles[y][x].label = '';
+  const tile = dungeon.tiles[y][x];
+  tile.originalType = tile.type;
+  tile.consumed = true;
+  tile.type = TileType.Empty;
+  tile.label = '';
   events.push({ kind: 'tile_consumed', x, y });
 }
 

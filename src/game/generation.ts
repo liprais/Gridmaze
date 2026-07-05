@@ -169,7 +169,7 @@ function tryGenerate(
       } else {
         type = randomTileType(floor, rng);
       }
-      row.push({ x, y, type, label: tileLabel(type, rng), explored: false, steppedOn: false, consumed: false });
+      row.push({ x, y, type, label: tileLabel(type, rng), explored: false, steppedOn: false, consumed: false, originalType: null });
     }
     tiles.push(row);
   }
