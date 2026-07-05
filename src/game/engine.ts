@@ -2,7 +2,15 @@ import { TileType, DungeonData, RelicId } from '../types';
 import { CONFIG, isHazardType } from './config';
 import { generateDungeon, getTileAt, hasPath } from './generation';
 import type { RNG } from './rng';
-import { shouldGainBackupShield, shouldResetCostStability, isTeleportSafe, deepCacheRestoresStability } from './relics';
+import {
+  shouldGainBackupShield,
+  shouldResetCostStability,
+  isTeleportSafe,
+  deepCacheRestoresStability,
+  ALL_RELICS,
+  getRelicChoiceCount,
+  canRefreshChoices,
+} from './relics';
 
 // ── State ───────────────────────────────────────────────────────────
 
@@ -140,7 +148,15 @@ export function processMove(
       next.dungeon = generateDungeon(CONFIG.dungeon.width, CONFIG.dungeon.height, next.floor, rng);
       next.playerX = 0;
       next.playerY = 0;
+      next.coreCollectedThisFloor = false;
       events.push({ kind: 'exit_reached', floorCleared: false, newFloor: next.floor });
+      if (next.floor === 6) {
+        events.push({
+          kind: 'relic_choice',
+          options: pickRelicOptions(next.relics, next.coresThisChapter, rng),
+          canRefresh: canRefreshChoices(next.coresThisChapter),
+        });
+      }
     }
     return { state: next, events };
   }
@@ -220,6 +236,23 @@ export function processMove(
   }
 
   return { state: next, events };
+}
+
+/** Choose a relic from the presented options. */
+export function chooseRelic(state: EngineState, relic: RelicId): { state: EngineState; events: GameEvent[] } {
+  const next = { ...state, relics: [...state.relics, relic] };
+  if (relic === 'backupShield') next.hasShield = true;
+  return { state: next, events: [{ kind: 'relic_gained', relic }] };
+}
+
+function pickRelicOptions(owned: RelicId[], cores: number, rng: RNG): RelicId[] {
+  const pool = ALL_RELICS.map(r => r.id).filter(id => !owned.includes(id));
+  const count = getRelicChoiceCount(cores);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = rng.nextInt(i + 1);
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, count);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────

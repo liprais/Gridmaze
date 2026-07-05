@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { TileType } from './types';
+import { TileType, RelicId } from './types';
 import { createDungeonMesh, createFogOverlay, revealAround, revealTile, revealAll, tileToWorld, disposeDungeonMeshes, disposeFogOverlay, rebuildAllLabels, consumeTileVisuals } from './dungeon';
 import type { DungeonMeshes } from './dungeon';
 import { Player, PLAYER_Y } from './player';
@@ -9,7 +9,7 @@ import { CONFIG } from './game/config';
 import { getChapterRules } from './game/chapter';
 import { getExitWhisperDirection } from './game/relics';
 import { createRNG } from './game/rng';
-import { createInitialState, processMove } from './game/engine';
+import { createInitialState, processMove, chooseRelic } from './game/engine';
 import { setLabelProvider } from './game/generation';
 import type { EngineState, GameEvent } from './game/engine';
 
@@ -227,6 +227,65 @@ function clearMovementKeys() {
   }
 }
 
+const relicOverlay = document.getElementById('relic-overlay')!;
+const relicCards = document.getElementById('relic-cards')!;
+const relicRefresh = document.getElementById('relic-refresh')!;
+const chapterCompleteOverlay = document.getElementById('chapter-complete-overlay')!;
+const chapterRestartBtn = document.getElementById('chapter-restart')!;
+
+function showRelicChoice(event: Extract<GameEvent, { kind: 'relic_choice' }>) {
+  relicCards.innerHTML = '';
+  for (const relic of event.options) {
+    const card = document.createElement('button');
+    card.style.cssText = 'background:#2a2a3e;border:1px solid #45475a;border-radius:8px;padding:12px;color:#cdd6f4;cursor:pointer;flex:1;min-width:120px;';
+    card.innerHTML = `<div style="font-weight:bold;margin-bottom:4px;">${t(`relic.${relic}.name`)}</div><div style="font-size:12px;color:#a6adc8;">${t(`relic.${relic}.desc`)}</div>`;
+    card.addEventListener('click', () => {
+      const result = chooseRelic(gameState, relic);
+      gameState = result.state;
+      for (const e of result.events) dispatchEvent(e);
+      hideRelicChoice();
+      updateHUD();
+    });
+    relicCards.appendChild(card);
+  }
+
+  relicRefresh.style.display = event.canRefresh ? 'inline-block' : 'none';
+  if (event.canRefresh) {
+    relicRefresh.onclick = () => {
+      // Re-roll options using the same logic as the engine.
+      const pool = ['afterglow', 'backupShield', 'stableAnchor', 'teleportCalib', 'exitWhisper', 'deepCache'].filter(
+        id => !gameState.relics.includes(id as RelicId),
+      );
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = rng.nextInt(i + 1);
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      event.options = pool.slice(0, event.options.length) as RelicId[];
+      showRelicChoice(event);
+    };
+  }
+  relicOverlay.classList.remove('hidden');
+}
+
+function hideRelicChoice() {
+  relicOverlay.classList.add('hidden');
+}
+
+function showChapterCompleteOverlay() {
+  chapterCompleteOverlay.classList.remove('hidden');
+}
+
+function hideChapterCompleteOverlay() {
+  chapterCompleteOverlay.classList.add('hidden');
+}
+
+chapterRestartBtn.addEventListener('click', () => {
+  hideChapterCompleteOverlay();
+  gameState = createInitialState(rng);
+  regenerateDungeonMesh();
+  updateHUD();
+});
+
 // ── Event dispatch: engine → rendering ───────────────────────
 
 function dispatchEvent(event: GameEvent) {
@@ -248,8 +307,23 @@ function dispatchEvent(event: GameEvent) {
         addLog('▌ ' + t('log.escaped'));
       } else {
         regenerateDungeonMesh();
-        addLog('▌ ' + t('log.descended', { floor: event.newFloor, max: CONFIG.dungeon.maxFloor }));
+        if (gameState.floor === 6) {
+          // Floor 5 exit: relic choice will be shown by the relic_choice event.
+        } else if (gameState.floor === 12) {
+          // Chapter complete after exiting floor 11.
+          showChapterCompleteOverlay();
+        } else {
+          addLog('▌ ' + t('log.descended', { floor: event.newFloor, max: CONFIG.dungeon.maxFloor }));
+        }
       }
+      break;
+
+    case 'relic_choice':
+      showRelicChoice(event);
+      break;
+
+    case 'relic_gained':
+      addLog('▌ ' + t('log.relicGained', { name: t(`relic.${event.relic}.name`) }));
       break;
 
     case 'hazard_absorbed':
