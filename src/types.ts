@@ -18,6 +18,7 @@ export interface Tile {
   label: string;
   explored: boolean;   // fog removed
   steppedOn: boolean;  // player has walked on it → show true color
+  consumed: boolean;   // one-time reward tile has been used
 }
 
 export interface DungeonData {
@@ -25,6 +26,8 @@ export interface DungeonData {
   height: number;
   exitX: number;
   exitY: number;
+  coreX: number;
+  coreY: number;
   tiles: Tile[][];
 }
 
@@ -39,3 +42,13 @@ export interface GameState {
   dungeon: DungeonData;
   log: string[];
 }
+
+export type RelicId =
+  | 'afterglow'
+  | 'backupShield'
+  | 'stableAnchor'
+  | 'teleportCalib'
+  | 'exitWhisper'
+  | 'deepCache';
+
+export type ChapterZone = 'survey' | 'dark' | 'unstable';

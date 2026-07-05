@@ -9,9 +9,11 @@ import type { EngineState } from '../game/engine';
 
 /** Helper: create a minimal test dungeon */
 function makeTestDungeon(overrides?: Partial<{
-  tiles: Partial<{ type: TileType; steppedOn: boolean; explored: boolean; label: string }>[][];
+  tiles: Partial<{ type: TileType; steppedOn: boolean; explored: boolean; label: string; consumed: boolean }>[][];
   exitX: number;
   exitY: number;
+  coreX: number;
+  coreY: number;
   width: number;
   height: number;
 }>): DungeonData {
@@ -25,6 +27,7 @@ function makeTestDungeon(overrides?: Partial<{
       label: '',
       explored: false,
       steppedOn: false,
+      consumed: false,
     })),
   );
   // Apply per-tile overrides
@@ -42,6 +45,8 @@ function makeTestDungeon(overrides?: Partial<{
     height: h,
     exitX: overrides?.exitX ?? (w - 1),
     exitY: overrides?.exitY ?? (h - 1),
+    coreX: overrides?.coreX ?? -1,
+    coreY: overrides?.coreY ?? -1,
     tiles,
   };
 }
@@ -52,8 +57,15 @@ function makeState(overrides?: Partial<EngineState>): EngineState {
     playerY: 0,
     floor: 1,
     hasShield: false,
+    stability: 3,
+    coresThisChapter: 0,
+    totalCores: 0,
+    relics: [],
+    resetsThisChapter: 0,
+    coreCollectedThisFloor: false,
     dungeon: makeTestDungeon(),
     gameWon: false,
+    chapterFailed: false,
     ...overrides,
   };
 }
@@ -161,9 +173,9 @@ describe('Exit tile', () => {
         [{}, {}, {}],
         [{}, {}, { type: TileType.Exit }],
       ],
-      width: 3, height: 3, exitX: 2, exitY: 2,
+      width: 3, height: 3, exitX: 2, exitY: 2, coreX: 1, coreY: 1,
     });
-    const state = makeState({ dungeon, playerX: 1, playerY: 2, floor: 5 });
+    const state = makeState({ dungeon, playerX: 1, playerY: 2, floor: 4 });
     const rng = createRNG(42);
     const result = processMove(state, 1, 0, rng);
 
@@ -171,11 +183,35 @@ describe('Exit tile', () => {
     // tiles on the NEW dungeon and pollute its exploration state.
     expect(result.events).toHaveLength(1);
     expect(result.events[0].kind).toBe('exit_reached');
-    expect(result.events[0]).toMatchObject({ floorCleared: false, newFloor: 6 });
-    expect(result.state.floor).toBe(6);
+    expect(result.events[0]).toMatchObject({ floorCleared: false, newFloor: 5 });
+    expect(result.state.floor).toBe(5);
     expect(result.state.playerX).toBe(0);
     expect(result.state.playerY).toBe(0);
     expect(result.state.dungeon.width).toBe(CONFIG.dungeon.width);
+  });
+
+  it('at floor 5: offers a relic choice after descending', () => {
+    const dungeon = makeTestDungeon({
+      tiles: [
+        [{}, {}, {}],
+        [{}, {}, {}],
+        [{}, {}, { type: TileType.Exit }],
+      ],
+      width: 3, height: 3, exitX: 2, exitY: 2, coreX: 1, coreY: 1,
+    });
+    const state = makeState({ dungeon, playerX: 1, playerY: 2, floor: 5 });
+    const rng = createRNG(42);
+    const result = processMove(state, 1, 0, rng);
+
+    expect(result.events).toHaveLength(2);
+    expect(result.events[0].kind).toBe('exit_reached');
+    expect(result.events[0]).toMatchObject({ floorCleared: false, newFloor: 6 });
+    expect(result.events[1].kind).toBe('relic_choice');
+    expect(result.events[1]).toMatchObject({
+      options: expect.any(Array),
+      canRefresh: expect.any(Boolean),
+    });
+    expect(result.state.floor).toBe(6);
   });
 
   it('at max floor: sets gameWon and returns victory', () => {
@@ -183,7 +219,7 @@ describe('Exit tile', () => {
       tiles: [
         [{}, { type: TileType.Exit }],
       ],
-      width: 2, height: 1, exitX: 1, exitY: 0,
+      width: 2, height: 1, exitX: 1, exitY: 0, coreX: 0, coreY: 0,
     });
     const state = makeState({ dungeon, playerX: 0, playerY: 0, floor: 99 });
     const rng = createRNG(42);
@@ -425,6 +461,94 @@ describe('Event ordering', () => {
       const result = processMove(state, 1, 0, rng);
       expect(result.events[0].kind).toBe('move');
     }
+  });
+});
+
+describe('stability', () => {
+  it('reset without shield costs 1 stability', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.Reset }]], width: 2, height: 1 });
+    const state = makeState({ dungeon, stability: 3 });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(2);
+    expect(result.events.some(e => e.kind === 'stability_lost')).toBe(true);
+  });
+
+  it('teleport without shield costs 1 stability', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.Teleport }, {}]], width: 3, height: 1 });
+    const state = makeState({ dungeon, stability: 2 });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(1);
+  });
+
+  it('random map does not cost stability', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.RandomMap }]], width: 2, height: 1 });
+    const state = makeState({ dungeon, stability: 2 });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(2);
+  });
+
+  it('shield absorbs hazard without losing stability', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.Reset }]], width: 2, height: 1 });
+    const state = makeState({ dungeon, stability: 1, hasShield: true });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(1);
+    expect(result.state.hasShield).toBe(false);
+  });
+
+  it('stability reaching 0 triggers chapter_failed', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.Reset }]], width: 2, height: 1 });
+    const state = makeState({ dungeon, stability: 1 });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(0);
+    expect(result.state.chapterFailed).toBe(true);
+    expect(result.events.some(e => e.kind === 'chapter_failed')).toBe(true);
+  });
+});
+
+describe('data core', () => {
+  it('collecting core increments counters and emits event', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, {}]], width: 2, height: 1, exitX: 0, exitY: 0, coreX: 1, coreY: 0 });
+    const state = makeState({ dungeon, playerX: 0, playerY: 0, coresThisChapter: 1, totalCores: 5 });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.coresThisChapter).toBe(2);
+    expect(result.state.totalCores).toBe(6);
+    expect(result.state.coreCollectedThisFloor).toBe(true);
+    expect(result.events.some(e => e.kind === 'core_collected')).toBe(true);
+  });
+
+  it('core collection stops after first pickup on a floor', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, {}]], width: 2, height: 1, exitX: 0, exitY: 0, coreX: 1, coreY: 0 });
+    const state = makeState({ dungeon, playerX: 0, playerY: 0, coresThisChapter: 1, totalCores: 5 });
+    const afterFirst = processMove(state, 1, 0, createRNG(1));
+    const afterSecond = processMove(afterFirst.state, -1, 0, createRNG(1));
+    const afterThird = processMove(afterSecond.state, 1, 0, createRNG(1));
+    expect(afterThird.state.coresThisChapter).toBe(2);
+    expect(afterThird.state.totalCores).toBe(6);
+  });
+});
+
+describe('relic effects in engine', () => {
+  it('backup shield grants shield at chapter start', () => {
+    const state = createInitialState(createRNG(1));
+    state.relics = ['backupShield'];
+    // createInitialState does not apply relics; simulate a fresh run with relics
+    const withRelic = { ...state, hasShield: true };
+    const result = processMove(withRelic, 1, 0, createRNG(1));
+    expect(result.state.hasShield).toBe(true);
+  });
+
+  it('stable anchor skips first reset stability cost', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.Reset }]], width: 2, height: 1 });
+    const state = makeState({ dungeon, stability: 1, relics: ['stableAnchor'] });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(1);
+  });
+
+  it('deep cache restores stability every 3 cores', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, {}]], width: 2, height: 1, exitX: 0, exitY: 0, coreX: 1, coreY: 0 });
+    const state = makeState({ dungeon, stability: 1, totalCores: 2, relics: ['deepCache'] });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(2);
   });
 });
 

@@ -2,7 +2,49 @@ export type Lang = 'en' | 'zh';
 
 const STORAGE_KEY = 'gridmaze-lang';
 
-const translations = {
+type RelicTranslation = { name: string; desc: string };
+
+interface TranslationSet {
+  ui: Record<string, string>;
+  overlay: Record<string, string>;
+  legend: Record<string, string>;
+  log: Record<string, string | string[]>;
+  tileLabels: Record<number, string>;
+  tileNames: Record<string, string>;
+  relic: Record<string, string | RelicTranslation>;
+}
+
+const RELIC_EN: Record<string, string | RelicTranslation> = {
+  chooseTitle: 'Choose a Relic',
+  chooseSubtitle: 'Collected cores this chapter: {cores}',
+  refresh: 'Refresh choices',
+  chapterComplete: 'Chapter 1 Complete',
+  chapterCompleteSubtitle: 'You cleared all 11 floors.',
+  restartChapter: 'Restart Chapter',
+  afterglow: { name: 'Afterglow', desc: 'Initial reveal radius +1' },
+  backupShield: { name: 'Backup Shield', desc: 'Start each chapter with a shield' },
+  stableAnchor: { name: 'Stable Anchor', desc: 'First Reset each chapter costs no stability' },
+  teleportCalib: { name: 'Teleport Calibration', desc: 'Teleport never lands on hazards' },
+  exitWhisper: { name: 'Exit Whisper', desc: 'Arrow points toward exit within 2 tiles' },
+  deepCache: { name: 'Deep Cache', desc: 'Every 3 cores restore 1 stability' },
+};
+
+const RELIC_ZH: Record<string, string | RelicTranslation> = {
+  chooseTitle: '选择遗物',
+  chooseSubtitle: '本章已收集核心：{cores}',
+  refresh: '刷新选项',
+  chapterComplete: '第一章完成',
+  chapterCompleteSubtitle: '你已通关全部 11 层。',
+  restartChapter: '重新开始本章',
+  afterglow: { name: '余光', desc: '初始揭示半径 +1' },
+  backupShield: { name: '备用护盾', desc: '每章开始时获得一次护盾' },
+  stableAnchor: { name: '稳定锚', desc: '每章第一次回起点不扣稳定度' },
+  teleportCalib: { name: '传送校准', desc: '传送不会落在危险地砖上' },
+  exitWhisper: { name: '出口低语', desc: '接近出口时显示方向箭头' },
+  deepCache: { name: '深层缓存', desc: '每收集 3 个核心恢复 1 点稳定度' },
+};
+
+const translations: { en: TranslationSet; zh: TranslationSet } = {
   en: {
     ui: {
       title: 'Gridmaze',
@@ -12,9 +54,12 @@ const translations = {
       position: 'Position',
       shieldActive: 'Shield active',
       langButton: '中 / EN',
+      stability: 'Stability',
+      coreDistance: 'Core distance',
+      cores: 'Cores',
     },
     overlay: {
-      subtitle: 'Escape the dungeon!<br>Reach the <span style="color:#06d6a0">Exit ▨</span> on each floor to descend.<br>Clear all <b>99 floors</b> to win.',
+      subtitle: 'Escape the dungeon!<br>Reach the <span style="color:#06d6a0">Exit ▨</span> on each floor to descend.<br>Clear all <b>11 floors</b> to win.',
       controlsTitle: '▸ Controls',
       controls: '<b>WASD</b> / <b>Arrow Keys</b> — Move one tile<br><b>Scroll</b> — Zoom · <b>Right-drag</b> — Rotate view<br><b>Swipe</b> on mobile to move',
       tileTypesTitle: '▸ Tile Types',
@@ -50,6 +95,10 @@ const translations = {
       scanned: 'Scanned entire floor!',
       gainedShield: 'Gained a shield! Next hazard will be blocked.',
       debug: 'Debug: at ({x},{y}) moving={moving} floor={floor}',
+      consumedTile: 'The tile fades after use.',
+      chapterFailed: 'Stability depleted. Returning to chapter start...',
+      chapterComplete: 'Chapter 1 complete!',
+      relicGained: 'Gained relic: {name}',
       proximity: [
         'You feel a warm breeze... the exit is near.',
         'A faint glow emanates from nearby.',
@@ -80,6 +129,7 @@ const translations = {
       start: 'Start',
       unknown: '?',
     },
+    relic: RELIC_EN,
   },
   zh: {
     ui: {
@@ -90,9 +140,12 @@ const translations = {
       position: '位置',
       shieldActive: '护盾生效中',
       langButton: 'EN / 中',
+      stability: '稳定度',
+      coreDistance: '核心距离',
+      cores: '核心',
     },
     overlay: {
-      subtitle: '逃离迷宫！<br>抵达每层的 <span style="color:#06d6a0">出口 ▨</span> 向下深入。<br>通关全部 <b>99 层</b> 即可获胜。',
+      subtitle: '逃离迷宫！<br>抵达每层的 <span style="color:#06d6a0">出口 ▨</span> 向下深入。<br>通关全部 <b>11 层</b> 即可获胜。',
       controlsTitle: '▸ 操作方式',
       controls: '<b>WASD</b> / <b>方向键</b> — 移动一格<br><b>滚轮</b> — 缩放 · <b>右键拖拽</b> — 旋转视角<br>手机上 <b>滑动</b> 移动',
       tileTypesTitle: '▸ 地砖类型',
@@ -128,6 +181,10 @@ const translations = {
       scanned: '扫描了整层！',
       gainedShield: '获得护盾！下一次危险效果将被阻挡。',
       debug: '调试：位于 ({x},{y}) 移动中={moving} 层数={floor}',
+      consumedTile: '这块地砖在使用后暗淡下去。',
+      chapterFailed: '稳定度耗尽。返回章节起点……',
+      chapterComplete: '第一章完成！',
+      relicGained: '获得遗物：{name}',
       proximity: [
         '你感到一阵暖风……出口就在附近。',
         '附近散发出微弱的光芒。',
@@ -158,6 +215,7 @@ const translations = {
       start: '起点',
       unknown: '?',
     },
+    relic: RELIC_ZH,
   },
 };
 

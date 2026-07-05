@@ -200,11 +200,39 @@
         <div><span id="floor-num">1 / 99</span></div>
         <div><span data-i18n="ui.position">Position</span> <span class="coord" id="player-pos">0,0</span></div>
         <div id="shield-indicator" style="color:#ffd166;opacity:0" data-i18n="ui.shieldActive">Shield active</div>
+        <div id="stability-bar" style="margin-top:4px;">
+          <span data-i18n="ui.stability">Stability</span>
+          <span id="stability-dots"></span>
+        </div>
+        <div id="core-distance" style="margin-top:2px;">
+          <span data-i18n="ui.coreDistance">Core distance</span>: <span id="core-distance-value">—</span>
+        </div>
+        <div id="core-count" style="margin-top:2px;">
+          <span data-i18n="ui.cores">Cores</span>: <span id="core-count-value">0</span>
+        </div>
+        <div id="exit-whisper" style="margin-top:2px;opacity:0;">➤</div>
       </div>
     </div>
   </div>
 
   <button id="lang-toggle" data-i18n="ui.langButton">中 / EN</button>
+
+  <div id="relic-overlay" class="hidden" style="position:fixed;inset:0;background:rgba(10,10,20,0.9);display:flex;align-items:center;justify-content:center;z-index:200;">
+    <div style="background:#1e1e2e;border:1px solid #3d405b;border-radius:12px;padding:28px 32px;max-width:540px;width:90%;color:#cdd6f4;">
+      <h2 data-i18n="relic.chooseTitle">Choose a Relic</h2>
+      <p data-i18n="relic.chooseSubtitle">Your cores this chapter affect the quality of choices.</p>
+      <div id="relic-cards" style="display:flex;gap:12px;margin-top:16px;justify-content:center;"></div>
+      <button id="relic-refresh" style="margin-top:16px;display:none;">↻ Refresh</button>
+    </div>
+  </div>
+
+  <div id="chapter-complete-overlay" class="hidden" style="position:fixed;inset:0;background:rgba(10,10,20,0.92);display:flex;align-items:center;justify-content:center;z-index:200;">
+    <div style="background:#1e1e2e;border:1px solid #3d405b;border-radius:12px;padding:28px 32px;max-width:420px;width:90%;color:#cdd6f4;text-align:center;">
+      <h2 data-i18n="relic.chapterComplete">Chapter 1 Complete</h2>
+      <p data-i18n="relic.chapterCompleteSubtitle">You cleared all 11 floors.</p>
+      <button id="chapter-restart" data-i18n="relic.restartChapter">Restart Chapter</button>
+    </div>
+  </div>
 
   <div id="legend">
     <div class="legend-title" data-i18n="legend.title">Tile Types</div>

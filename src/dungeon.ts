@@ -181,6 +181,30 @@ export function revealTile(
   }
 }
 
+/** Update a consumed reward tile to look like an empty tile. */
+export function consumeTileVisuals(
+  dungeon: DungeonData,
+  meshes: DungeonMeshes,
+  x: number,
+  y: number,
+): void {
+  const tile = dungeon.tiles[y][x];
+  tile.type = TileType.Empty;
+  tile.label = '';
+
+  const mesh = meshes.tiles[y][x];
+  (mesh.material as THREE.MeshStandardMaterial).color.set(COLORS[TileType.Empty]);
+
+  const sprite = meshes.labelSprites[y][x];
+  if (sprite) {
+    meshes.labels.remove(sprite);
+    const mat = sprite.material as THREE.SpriteMaterial;
+    if (mat.map) mat.map.dispose();
+    mat.dispose();
+    meshes.labelSprites[y][x] = null;
+  }
+}
+
 /** Rebuild labels from scratch (used when regenerating dungeon) */
 export function createTileLabels(dungeon: DungeonData): THREE.Group {
   const { group } = buildLabels(dungeon);
@@ -286,6 +310,7 @@ export function revealAround(
   cx: number,
   cy: number,
   radius: number,
+  showAdjacentWalls: boolean = false,
 ): number {
   let count = 0;
   for (let y = cy - radius; y <= cy + radius; y++) {
@@ -304,6 +329,17 @@ export function revealAround(
       count++;
     }
   }
+
+  if (showAdjacentWalls) {
+    for (const [ax, ay] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) {
+      if (ax < 0 || ay < 0 || ax >= dungeon.width || ay >= dungeon.height) continue;
+      const adjTile = dungeon.tiles[ay][ax];
+      if (adjTile.type === TileType.Wall) {
+        (meshes.tiles[ay][ax].material as THREE.MeshStandardMaterial).color.set(COLORS[TileType.Wall]);
+      }
+    }
+  }
+
   return count;
 }
 
@@ -316,4 +352,23 @@ export function worldToTile(worldX: number, worldZ: number): { x: number; y: num
 
 export function tileToWorld(tileX: number, tileY: number): THREE.Vector3 {
   return new THREE.Vector3(tileX * TILE_SIZE, 0, tileY * TILE_SIZE);
+}
+
+// ── Hazard warning ─────────────────────────────────────────────
+
+/** Create a red pulsing ring that warns of a nearby hazard tile. */
+export function createHazardWarning(x: number, y: number): THREE.Mesh {
+  const geo = new THREE.TorusGeometry(0.35, 0.05, 12, 24);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xff0000,
+    emissive: 0xff0000,
+    emissiveIntensity: 1.2,
+    transparent: true,
+    opacity: 0.85,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(x * TILE_SIZE, 0.28, y * TILE_SIZE);
+  mesh.userData = { baseY: 0.28 };
+  return mesh;
 }
