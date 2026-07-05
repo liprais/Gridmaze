@@ -310,6 +310,7 @@ export function revealAround(
   cx: number,
   cy: number,
   radius: number,
+  showAdjacentWalls: boolean = false,
 ): number {
   let count = 0;
   for (let y = cy - radius; y <= cy + radius; y++) {
@@ -328,6 +329,17 @@ export function revealAround(
       count++;
     }
   }
+
+  if (showAdjacentWalls) {
+    for (const [ax, ay] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) {
+      if (ax < 0 || ay < 0 || ax >= dungeon.width || ay >= dungeon.height) continue;
+      const adjTile = dungeon.tiles[ay][ax];
+      if (adjTile.type === TileType.Wall) {
+        (meshes.tiles[ay][ax].material as THREE.MeshStandardMaterial).color.set(COLORS[TileType.Wall]);
+      }
+    }
+  }
+
   return count;
 }
 

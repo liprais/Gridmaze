@@ -6,6 +6,7 @@ import type { DungeonMeshes } from './dungeon';
 import { Player, PLAYER_Y } from './player';
 import { init as initI18n, setLang, getLang, t, getTileLabel, getTileName, getProximityMessage, refreshTileLabels } from './i18n';
 import { CONFIG } from './game/config';
+import { getChapterRules } from './game/chapter';
 import { createRNG } from './game/rng';
 import { createInitialState, processMove } from './game/engine';
 import { setLabelProvider } from './game/generation';
@@ -211,7 +212,7 @@ function dispatchEvent(event: GameEvent) {
   switch (event.kind) {
     case 'move':
       player.moveTo(event.toX, event.toY);
-      revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, event.toX, event.toY, CONFIG.dungeon.revealRadius);
+      revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, event.toX, event.toY, CONFIG.dungeon.revealRadius, getChapterRules(gameState.floor).showAdjacentWalls);
       revealTile(gameState.dungeon, dungeonMeshes, event.toX, event.toY);
       addLog('▌ ' + t('log.moveTo', { x: event.toX, y: event.toY, tile: getTileNameForEvent(event.tileType, event.tileLabel) }));
       break;
@@ -400,7 +401,7 @@ function regenerateDungeonMesh() {
   scene.add(fogData.group);
 
   player.resetPosition(gameState.playerX, gameState.playerY);
-  revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, gameState.playerX, gameState.playerY, CONFIG.dungeon.revealRadius);
+  revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, gameState.playerX, gameState.playerY, CONFIG.dungeon.revealRadius, getChapterRules(gameState.floor).showAdjacentWalls);
   revealTile(gameState.dungeon, dungeonMeshes, gameState.playerX, gameState.playerY);
   updateHUD();
 }
@@ -523,12 +524,12 @@ function animate() {
         const tp = (player.mesh as any).__teleportTarget;
         if (tp) {
           player.resetPosition(tp.tx, tp.ty);
-          revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, tp.tx, tp.ty, CONFIG.dungeon.revealRadius);
+          revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, tp.tx, tp.ty, CONFIG.dungeon.revealRadius, getChapterRules(gameState.floor).showAdjacentWalls);
           revealTile(gameState.dungeon, dungeonMeshes, tp.tx, tp.ty);
           delete (player.mesh as any).__teleportTarget;
         } else {
           player.resetPosition(0, 0);
-          revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, 0, 0, CONFIG.dungeon.revealRadius);
+          revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, 0, 0, CONFIG.dungeon.revealRadius, getChapterRules(gameState.floor).showAdjacentWalls);
           revealTile(gameState.dungeon, dungeonMeshes, 0, 0);
         }
         playerAnim = 'grow';
@@ -637,7 +638,7 @@ startRing.position.set(0, 0.18, 0);
 scene.add(startRing);
 
 // ── Start ────────────────────────────────────────────────────
-revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, 0, 0, CONFIG.dungeon.revealRadius);
+revealAround(fogData.meshes, gameState.dungeon, dungeonMeshes, 0, 0, CONFIG.dungeon.revealRadius, getChapterRules(gameState.floor).showAdjacentWalls);
 revealTile(gameState.dungeon, dungeonMeshes, 0, 0);
 updateHUD();
 animate();
