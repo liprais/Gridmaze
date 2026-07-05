@@ -45,9 +45,9 @@ export function isTeleportSafe(relics: RelicId[]): boolean {
   return hasRelic(relics, 'teleportCalib');
 }
 
-export function deepCacheRestoresStability(relics: RelicId[], totalCores: number): number {
-  if (!hasRelic(relics, 'deepCache')) return 0;
-  return Math.floor(totalCores / 3);
+export function deepCacheRestoresStability(relics: RelicId[], totalCores: number): boolean {
+  if (!hasRelic(relics, 'deepCache')) return false;
+  return totalCores > 0 && totalCores % 3 === 0;
 }
 
 export function getExitWhisperDirection(

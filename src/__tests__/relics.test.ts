@@ -54,9 +54,9 @@ describe('relics', () => {
   });
 
   it('deep cache restores stability every 3 cores', () => {
-    expect(deepCacheRestoresStability(['deepCache'], 2)).toBe(0);
-    expect(deepCacheRestoresStability(['deepCache'], 3)).toBe(1);
-    expect(deepCacheRestoresStability(['deepCache'], 6)).toBe(2);
-    expect(deepCacheRestoresStability([], 3)).toBe(0);
+    expect(deepCacheRestoresStability(['deepCache'], 2)).toBe(false);
+    expect(deepCacheRestoresStability(['deepCache'], 3)).toBe(true);
+    expect(deepCacheRestoresStability(['deepCache'], 6)).toBe(true);
+    expect(deepCacheRestoresStability([], 3)).toBe(false);
   });
 });

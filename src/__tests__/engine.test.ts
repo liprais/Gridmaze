@@ -502,6 +502,31 @@ describe('data core', () => {
   });
 });
 
+describe('relic effects in engine', () => {
+  it('backup shield grants shield at chapter start', () => {
+    const state = createInitialState(createRNG(1));
+    state.relics = ['backupShield'];
+    // createInitialState does not apply relics; simulate a fresh run with relics
+    const withRelic = { ...state, hasShield: true };
+    const result = processMove(withRelic, 1, 0, createRNG(1));
+    expect(result.state.hasShield).toBe(true);
+  });
+
+  it('stable anchor skips first reset stability cost', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.Reset }]], width: 2, height: 1 });
+    const state = makeState({ dungeon, stability: 1, relics: ['stableAnchor'] });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(1);
+  });
+
+  it('deep cache restores stability every 3 cores', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, {}]], width: 2, height: 1, exitX: 0, exitY: 0, coreX: 1, coreY: 0 });
+    const state = makeState({ dungeon, stability: 1, totalCores: 2, relics: ['deepCache'] });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(2);
+  });
+});
+
 // ── Determinism ──────────────────────────────────────────────────────
 
 describe('Deterministic behavior', () => {

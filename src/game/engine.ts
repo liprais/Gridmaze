@@ -117,6 +117,10 @@ export function processMove(
     next.coresThisChapter++;
     next.totalCores++;
     events.push({ kind: 'core_collected', x: nx, y: ny });
+    if (deepCacheRestoresStability(next.relics, next.totalCores)) {
+      next.stability = Math.min(3, next.stability + 1);
+      events.push({ kind: 'stability_lost', amount: -1, remaining: next.stability });
+    }
   }
 
   // ── Exit ──
