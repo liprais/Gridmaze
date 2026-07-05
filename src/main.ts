@@ -7,6 +7,7 @@ import { Player, PLAYER_Y } from './player';
 import { init as initI18n, setLang, getLang, t, getTileLabel, getTileName, getProximityMessage, refreshTileLabels } from './i18n';
 import { CONFIG } from './game/config';
 import { getChapterRules } from './game/chapter';
+import { getExitWhisperDirection } from './game/relics';
 import { createRNG } from './game/rng';
 import { createInitialState, processMove } from './game/engine';
 import { setLabelProvider } from './game/generation';
@@ -170,6 +171,26 @@ function updateHUD() {
   }
 
   hudShield.style.opacity = player.hasShield ? '1' : '0';
+
+  const dotsEl = document.getElementById('stability-dots')!;
+  dotsEl.textContent = Array(3).fill(0).map((_, i) => i < gameState.stability ? '●' : '○').join(' ');
+
+  const dist = Math.abs(gameState.playerX - gameState.dungeon.coreX) + Math.abs(gameState.playerY - gameState.dungeon.coreY);
+  document.getElementById('core-distance-value')!.textContent = gameState.coreCollectedThisFloor ? '—' : String(dist);
+  document.getElementById('core-count-value')!.textContent = String(gameState.coresThisChapter);
+
+  const whisperEl = document.getElementById('exit-whisper')!;
+  const whisperDir = getExitWhisperDirection(
+    { playerX: gameState.playerX, playerY: gameState.playerY, exitX: gameState.dungeon.exitX, exitY: gameState.dungeon.exitY, cameraAngle: controls.getAzimuthalAngle() },
+    gameState.relics,
+  );
+  if (whisperDir) {
+    const arrows: Record<string, string> = { up: '↑', down: '↓', left: '←', right: '→' };
+    whisperEl.textContent = arrows[whisperDir];
+    whisperEl.style.opacity = '1';
+  } else {
+    whisperEl.style.opacity = '0';
+  }
 }
 
 // ── Input ────────────────────────────────────────────────────

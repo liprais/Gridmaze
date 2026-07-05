@@ -12,6 +12,9 @@ const translations = {
       position: 'Position',
       shieldActive: 'Shield active',
       langButton: '中 / EN',
+      stability: 'Stability',
+      coreDistance: 'Core distance',
+      cores: 'Cores',
     },
     overlay: {
       subtitle: 'Escape the dungeon!<br>Reach the <span style="color:#06d6a0">Exit ▨</span> on each floor to descend.<br>Clear all <b>99 floors</b> to win.',
@@ -90,6 +93,9 @@ const translations = {
       position: '位置',
       shieldActive: '护盾生效中',
       langButton: 'EN / 中',
+      stability: '稳定度',
+      coreDistance: '核心距离',
+      cores: '核心',
     },
     overlay: {
       subtitle: '逃离迷宫！<br>抵达每层的 <span style="color:#06d6a0">出口 ▨</span> 向下深入。<br>通关全部 <b>99 层</b> 即可获胜。',
