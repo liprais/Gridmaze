@@ -175,7 +175,7 @@ describe('Exit tile', () => {
       ],
       width: 3, height: 3, exitX: 2, exitY: 2, coreX: 1, coreY: 1,
     });
-    const state = makeState({ dungeon, playerX: 1, playerY: 2, floor: 5 });
+    const state = makeState({ dungeon, playerX: 1, playerY: 2, floor: 4 });
     const rng = createRNG(42);
     const result = processMove(state, 1, 0, rng);
 
@@ -183,11 +183,35 @@ describe('Exit tile', () => {
     // tiles on the NEW dungeon and pollute its exploration state.
     expect(result.events).toHaveLength(1);
     expect(result.events[0].kind).toBe('exit_reached');
-    expect(result.events[0]).toMatchObject({ floorCleared: false, newFloor: 6 });
-    expect(result.state.floor).toBe(6);
+    expect(result.events[0]).toMatchObject({ floorCleared: false, newFloor: 5 });
+    expect(result.state.floor).toBe(5);
     expect(result.state.playerX).toBe(0);
     expect(result.state.playerY).toBe(0);
     expect(result.state.dungeon.width).toBe(CONFIG.dungeon.width);
+  });
+
+  it('at floor 5: offers a relic choice after descending', () => {
+    const dungeon = makeTestDungeon({
+      tiles: [
+        [{}, {}, {}],
+        [{}, {}, {}],
+        [{}, {}, { type: TileType.Exit }],
+      ],
+      width: 3, height: 3, exitX: 2, exitY: 2, coreX: 1, coreY: 1,
+    });
+    const state = makeState({ dungeon, playerX: 1, playerY: 2, floor: 5 });
+    const rng = createRNG(42);
+    const result = processMove(state, 1, 0, rng);
+
+    expect(result.events).toHaveLength(2);
+    expect(result.events[0].kind).toBe('exit_reached');
+    expect(result.events[0]).toMatchObject({ floorCleared: false, newFloor: 6 });
+    expect(result.events[1].kind).toBe('relic_choice');
+    expect(result.events[1]).toMatchObject({
+      options: expect.any(Array),
+      canRefresh: expect.any(Boolean),
+    });
+    expect(result.state.floor).toBe(6);
   });
 
   it('at max floor: sets gameWon and returns victory', () => {

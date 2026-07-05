@@ -353,3 +353,22 @@ export function worldToTile(worldX: number, worldZ: number): { x: number; y: num
 export function tileToWorld(tileX: number, tileY: number): THREE.Vector3 {
   return new THREE.Vector3(tileX * TILE_SIZE, 0, tileY * TILE_SIZE);
 }
+
+// ── Hazard warning ─────────────────────────────────────────────
+
+/** Create a red pulsing ring that warns of a nearby hazard tile. */
+export function createHazardWarning(x: number, y: number): THREE.Mesh {
+  const geo = new THREE.TorusGeometry(0.35, 0.05, 12, 24);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xff0000,
+    emissive: 0xff0000,
+    emissiveIntensity: 1.2,
+    transparent: true,
+    opacity: 0.85,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(x * TILE_SIZE, 0.28, y * TILE_SIZE);
+  mesh.userData = { baseY: 0.28 };
+  return mesh;
+}

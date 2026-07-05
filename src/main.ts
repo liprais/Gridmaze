@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TileType, RelicId } from './types';
-import { createDungeonMesh, createFogOverlay, revealAround, revealTile, revealAll, tileToWorld, disposeDungeonMeshes, disposeFogOverlay, rebuildAllLabels, consumeTileVisuals } from './dungeon';
+import { createDungeonMesh, createFogOverlay, revealAround, revealTile, revealAll, tileToWorld, disposeDungeonMeshes, disposeFogOverlay, rebuildAllLabels, consumeTileVisuals, createHazardWarning } from './dungeon';
 import type { DungeonMeshes } from './dungeon';
 import { Player, PLAYER_Y } from './player';
 import { init as initI18n, setLang, getLang, t, getTileLabel, getTileName, getProximityMessage, refreshTileLabels } from './i18n';
@@ -305,13 +305,11 @@ function dispatchEvent(event: GameEvent) {
       flashTimer = 0.3;
       if (event.floorCleared) {
         addLog('▌ ' + t('log.escaped'));
+        showChapterCompleteOverlay();
       } else {
         regenerateDungeonMesh();
         if (gameState.floor === 6) {
           // Floor 5 exit: relic choice will be shown by the relic_choice event.
-        } else if (gameState.floor === 12) {
-          // Chapter complete after exiting floor 11.
-          showChapterCompleteOverlay();
         } else {
           addLog('▌ ' + t('log.descended', { floor: event.newFloor, max: CONFIG.dungeon.maxFloor }));
         }
@@ -379,6 +377,17 @@ function dispatchEvent(event: GameEvent) {
       addLog('▌ ' + t('log.consumedTile'));
       break;
 
+    case 'chapter_failed':
+      shakeTimer = 0.5;
+      shieldBreakTimer = 0.5;
+      addLog('▌ ' + t('log.chapterFailed'));
+      chapterRestartPending = true;
+      setTimeout(() => {
+        restartChapter();
+        chapterRestartPending = false;
+      }, 1500);
+      break;
+
     case 'victory':
       addLog('▌ ' + t('log.escaped'));
       break;
@@ -404,7 +413,7 @@ function getTileNameForEvent(type: TileType, label: string): string {
 // ── Input handling ───────────────────────────────────────────
 
 function handleInput() {
-  if (player.isMoving || gameState.gameWon || playerAnim !== 'none') return;
+  if (player.isMoving || gameState.gameWon || playerAnim !== 'none' || chapterRestartPending) return;
 
   let inputX = 0, inputY = 0;
   if (keys.has('w') || keys.has('arrowup'))    inputY += 1;
@@ -459,6 +468,77 @@ function handleInput() {
   updateHUD();
 }
 
+let chapterRestartPending = false;
+
+// ── Hazard warnings ───────────────────────────────────────────
+const hazardWarnings = new Map<string, THREE.Mesh>();
+
+function disposeHazardWarning(mesh: THREE.Mesh): void {
+  mesh.geometry.dispose();
+  if (Array.isArray(mesh.material)) {
+    for (const m of mesh.material) m.dispose();
+  } else if (mesh.material) {
+    mesh.material.dispose();
+  }
+}
+
+function clearHazardWarnings(): void {
+  for (const [key, mesh] of hazardWarnings) {
+    scene.remove(mesh);
+    disposeHazardWarning(mesh);
+    hazardWarnings.delete(key);
+  }
+}
+
+function restartChapter(): void {
+  const savedRelics = [...gameState.relics];
+  gameState = createInitialState(rng);
+  gameState.relics = savedRelics;
+  if (savedRelics.includes('backupShield')) {
+    gameState.hasShield = true;
+  }
+  regenerateDungeonMesh();
+  updateHUD();
+}
+
+function updateHazardWarnings(): void {
+  const rules = getChapterRules(gameState.floor);
+  if (!rules.warnRandomMap) {
+    clearHazardWarnings();
+    return;
+  }
+
+  const px = gameState.playerX;
+  const py = gameState.playerY;
+  const needed = new Set<string>();
+
+  for (let y = 0; y < gameState.dungeon.height; y++) {
+    for (let x = 0; x < gameState.dungeon.width; x++) {
+      if (gameState.dungeon.tiles[y][x].type !== TileType.RandomMap) continue;
+      if (Math.abs(x - px) <= 1 && Math.abs(y - py) <= 1) {
+        needed.add(`${x},${y}`);
+      }
+    }
+  }
+
+  // Add new warnings
+  for (const key of needed) {
+    if (hazardWarnings.has(key)) continue;
+    const [x, y] = key.split(',').map(Number);
+    const mesh = createHazardWarning(x, y);
+    scene.add(mesh);
+    hazardWarnings.set(key, mesh);
+  }
+
+  // Remove stale warnings
+  for (const [key, mesh] of hazardWarnings) {
+    if (needed.has(key)) continue;
+    scene.remove(mesh);
+    disposeHazardWarning(mesh);
+    hazardWarnings.delete(key);
+  }
+}
+
 // ── Rendering regeneration (driven by engine state) ──────────
 
 /** Dispose a beacon group (torus + sphere dots) */
@@ -488,6 +568,8 @@ function regenerateDungeonMesh() {
     scene.remove(exitBeacon);
     exitBeacon = null;
   }
+
+  clearHazardWarnings();
 
   dungeonMeshes = createDungeonMesh(gameState.dungeon);
   fogData = createFogOverlay(gameState.dungeon);
@@ -555,6 +637,15 @@ function animate() {
     handleInput();
     player.update();
     controls.update();
+
+    // Update hazard warnings (unstable zone only)
+    updateHazardWarnings();
+    const elapsed = clock.elapsedTime;
+    for (const mesh of hazardWarnings.values()) {
+      const pulse = 1 + Math.sin(elapsed * 4) * 0.12;
+      mesh.scale.setScalar(pulse);
+      mesh.position.y = mesh.userData.baseY + Math.sin(elapsed * 3) * 0.03;
+    }
 
     // Animate exit beacon
     if (exitBeacon && !gameState.gameWon) {

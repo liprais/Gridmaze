@@ -4,7 +4,7 @@ export const CONFIG = {
   dungeon: {
     width: 12,
     height: 12,
-    maxFloor: 99,
+    maxFloor: 11,
     /** Fog-of-war reveal radius around the player */
     revealRadius: 1,
   },

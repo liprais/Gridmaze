@@ -59,7 +59,7 @@ const translations: { en: TranslationSet; zh: TranslationSet } = {
       cores: 'Cores',
     },
     overlay: {
-      subtitle: 'Escape the dungeon!<br>Reach the <span style="color:#06d6a0">Exit ▨</span> on each floor to descend.<br>Clear all <b>99 floors</b> to win.',
+      subtitle: 'Escape the dungeon!<br>Reach the <span style="color:#06d6a0">Exit ▨</span> on each floor to descend.<br>Clear all <b>11 floors</b> to win.',
       controlsTitle: '▸ Controls',
       controls: '<b>WASD</b> / <b>Arrow Keys</b> — Move one tile<br><b>Scroll</b> — Zoom · <b>Right-drag</b> — Rotate view<br><b>Swipe</b> on mobile to move',
       tileTypesTitle: '▸ Tile Types',
@@ -145,7 +145,7 @@ const translations: { en: TranslationSet; zh: TranslationSet } = {
       cores: '核心',
     },
     overlay: {
-      subtitle: '逃离迷宫！<br>抵达每层的 <span style="color:#06d6a0">出口 ▨</span> 向下深入。<br>通关全部 <b>99 层</b> 即可获胜。',
+      subtitle: '逃离迷宫！<br>抵达每层的 <span style="color:#06d6a0">出口 ▨</span> 向下深入。<br>通关全部 <b>11 层</b> 即可获胜。',
       controlsTitle: '▸ 操作方式',
       controls: '<b>WASD</b> / <b>方向键</b> — 移动一格<br><b>滚轮</b> — 缩放 · <b>右键拖拽</b> — 旋转视角<br>手机上 <b>滑动</b> 移动',
       tileTypesTitle: '▸ 地砖类型',
