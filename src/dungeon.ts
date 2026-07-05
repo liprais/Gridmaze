@@ -181,6 +181,30 @@ export function revealTile(
   }
 }
 
+/** Update a consumed reward tile to look like an empty tile. */
+export function consumeTileVisuals(
+  dungeon: DungeonData,
+  meshes: DungeonMeshes,
+  x: number,
+  y: number,
+): void {
+  const tile = dungeon.tiles[y][x];
+  tile.type = TileType.Empty;
+  tile.label = '';
+
+  const mesh = meshes.tiles[y][x];
+  (mesh.material as THREE.MeshStandardMaterial).color.set(COLORS[TileType.Empty]);
+
+  const sprite = meshes.labelSprites[y][x];
+  if (sprite) {
+    meshes.labels.remove(sprite);
+    const mat = sprite.material as THREE.SpriteMaterial;
+    if (mat.map) mat.map.dispose();
+    mat.dispose();
+    meshes.labelSprites[y][x] = null;
+  }
+}
+
 /** Rebuild labels from scratch (used when regenerating dungeon) */
 export function createTileLabels(dungeon: DungeonData): THREE.Group {
   const { group } = buildLabels(dungeon);

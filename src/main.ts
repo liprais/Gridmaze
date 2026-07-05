@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TileType } from './types';
-import { createDungeonMesh, createFogOverlay, revealAround, revealTile, revealAll, tileToWorld, disposeDungeonMeshes, disposeFogOverlay, rebuildAllLabels } from './dungeon';
+import { createDungeonMesh, createFogOverlay, revealAround, revealTile, revealAll, tileToWorld, disposeDungeonMeshes, disposeFogOverlay, rebuildAllLabels, consumeTileVisuals } from './dungeon';
 import type { DungeonMeshes } from './dungeon';
 import { Player, PLAYER_Y } from './player';
 import { init as initI18n, setLang, getLang, t, getTileLabel, getTileName, getProximityMessage, refreshTileLabels } from './i18n';
@@ -276,6 +276,11 @@ function dispatchEvent(event: GameEvent) {
       player.setShield(true);
       playerScaleVel = 0.3;
       addLog('▌ ' + t('log.gainedShield'));
+      break;
+
+    case 'tile_consumed':
+      consumeTileVisuals(gameState.dungeon, dungeonMeshes, event.x, event.y);
+      addLog('▌ ' + t('log.consumedTile'));
       break;
 
     case 'victory':
