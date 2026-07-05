@@ -47,6 +47,7 @@ build/Release
 out/
 .nuxt
 
+.worktrees/
 # dotenv environment variable files
 .env
 .env.local
