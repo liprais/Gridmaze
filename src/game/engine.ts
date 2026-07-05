@@ -142,6 +142,10 @@ export function processMove(
     }
 
     case TileType.RandomMap:
+      // The move event carries coordinates from the OLD dungeon. Because the
+      // state below replaces the dungeon, dispatching that move event would
+      // reveal tiles on the new map at stale coordinates. Drop it.
+      events.length = 0;
       next.dungeon = generateDungeon(CONFIG.dungeon.width, CONFIG.dungeon.height, next.floor, rng);
       next.playerX = 0;
       next.playerY = 0;

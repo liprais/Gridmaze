@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { PlayerState } from './types';
 import { tileToWorld } from './dungeon';
 
-const MOVE_SPEED = 0.08; // units per frame
+const MOVE_SPEED = 4.8; // units per second
 export const PLAYER_Y = 0.35;
 
 export class Player {
@@ -61,17 +61,18 @@ export class Player {
     this.moving = true;
   }
 
-  update() {
+  update(dt: number) {
     if (!this.moving) return;
 
     const dist = this.mesh.position.distanceTo(this.targetPos);
-    if (dist < 0.02) {
+    const step = MOVE_SPEED * dt;
+    if (dist <= step) {
       this.mesh.position.copy(this.targetPos);
       this.moving = false;
       return;
     }
 
     const dir = this.targetPos.clone().sub(this.mesh.position).normalize();
-    this.mesh.position.add(dir.multiplyScalar(MOVE_SPEED));
+    this.mesh.position.add(dir.multiplyScalar(step));
   }
 }

@@ -329,7 +329,8 @@ describe('RandomMap without shield', () => {
     const rng = createRNG(42);
     const result = processMove(state, 1, 0, rng);
 
-    expect(result.events[1].kind).toBe('map_regenerated');
+    expect(result.events[0].kind).toBe('map_regenerated');
+    expect(result.events).toHaveLength(1);
     expect(result.state.playerX).toBe(0);
     expect(result.state.playerY).toBe(0);
     // New dungeon should be different (different object reference at minimum)
@@ -409,9 +410,9 @@ describe('Shield pickup', () => {
 // ── Event ordering ───────────────────────────────────────────────────
 
 describe('Event ordering', () => {
-  it('move event is always first', () => {
+  it('move event is always first for tiles that do not regenerate the map', () => {
     const types: TileType[] = [
-      TileType.Reset, TileType.Teleport, TileType.RandomMap,
+      TileType.Reset, TileType.Teleport,
       TileType.Compass, TileType.Scan, TileType.Shield, TileType.Empty,
     ];
     for (const type of types) {

@@ -223,7 +223,7 @@ function dispatchEvent(event: GameEvent) {
     case 'exit_reached':
       flashTimer = 0.3;
       if (event.floorCleared) {
-        addLog('▌ ' + t('log.escaped'));
+        // Victory event will log the final escape message; don't duplicate it here.
       } else {
         regenerateDungeonMesh();
         addLog('▌ ' + t('log.descended', { floor: event.newFloor, max: CONFIG.dungeon.maxFloor }));
@@ -452,7 +452,7 @@ function animate() {
     }
 
     handleInput();
-    player.update();
+    player.update(dt);
     controls.update();
 
     // Animate exit beacon
