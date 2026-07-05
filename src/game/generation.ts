@@ -1,6 +1,7 @@
-import { TileType, DungeonData, Tile } from '../types';
+import { TileType, DungeonData, Tile, RelicId } from '../types';
 import { CONFIG } from './config';
 import type { RNG } from './rng';
+import { getChapterRules } from './chapter';
 
 // ── Built-in English label map (game/ must not depend on i18n) ────
 
@@ -75,7 +76,13 @@ export function randomTileTypeWithWeights(
 }
 
 export function randomTileType(floor: number, rng: RNG): TileType {
-  return randomTileTypeWithWeights(CONFIG.weights.scaledForFloor(floor), rng);
+  const rules = getChapterRules(floor);
+  const weights = CONFIG.weights.scaledForFloor(floor).map(w =>
+    w.type === TileType.RandomMap
+      ? { ...w, weight: w.weight + rules.randomMapWeightBonus }
+      : w,
+  );
+  return randomTileTypeWithWeights(weights, rng);
 }
 
 // ── Labels ──────────────────────────────────────────────────────────
@@ -162,7 +169,7 @@ function tryGenerate(
       } else {
         type = randomTileType(floor, rng);
       }
-      row.push({ x, y, type, label: tileLabel(type, rng), explored: false, steppedOn: false });
+      row.push({ x, y, type, label: tileLabel(type, rng), explored: false, steppedOn: false, consumed: false });
     }
     tiles.push(row);
   }
@@ -178,7 +185,44 @@ function tryGenerate(
     return null; // retry
   }
 
-  return { width, height, exitX: ex, exitY: ey, tiles };
+  const dungeon: DungeonData = { width, height, exitX: ex, exitY: ey, coreX: ex, coreY: ey, tiles };
+  const core = placeCore(dungeon, rng);
+  if (!core) return null;
+  dungeon.coreX = core.x;
+  dungeon.coreY = core.y;
+  // The core is hidden: it lives on an Empty tile. If generation happened to
+  // place a special tile there, overwrite it so the player never sees a
+  // misleading color or label at the core location.
+  const coreTile = dungeon.tiles[dungeon.coreY][dungeon.coreX];
+  if (coreTile.type !== TileType.Empty) {
+    coreTile.type = TileType.Empty;
+    coreTile.label = '';
+    coreTile.consumed = false;
+  }
+  return dungeon;
+}
+
+function placeCore(dungeon: DungeonData, rng: RNG): { x: number; y: number } | null {
+  const grid = dungeon.tiles.map(row => row.map(t => t.type));
+  const candidates: { x: number; y: number }[] = [];
+
+  for (let y = 0; y < dungeon.height; y++) {
+    for (let x = 0; x < dungeon.width; x++) {
+      if (x === 0 && y === 0) continue;
+      if (x === dungeon.exitX && y === dungeon.exitY) continue;
+      if (dungeon.tiles[y][x].type === TileType.Wall) continue;
+      if (!hasPath(grid, dungeon.width, dungeon.height, 0, 0, x, y)) continue;
+
+      const blocked = grid.map(row => [...row]);
+      blocked[y][x] = TileType.Wall;
+      if (hasPath(blocked, dungeon.width, dungeon.height, 0, 0, dungeon.exitX, dungeon.exitY)) {
+        candidates.push({ x, y });
+      }
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  return candidates[rng.nextInt(candidates.length)];
 }
 
 // ── Queries ─────────────────────────────────────────────────────────

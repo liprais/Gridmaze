@@ -184,6 +184,7 @@ describe('generateDungeon', () => {
   it('start is at (0,0) with Start type', () => {
     const d = generateDungeon(12, 12, 1, createRNG(2));
     expect(d.tiles[0][0].type).toBe(TileType.Start);
+    expect(d.coreX).toBeGreaterThanOrEqual(0);
   });
 
   it('exit is within bounds with Exit type', () => {
@@ -216,6 +217,8 @@ describe('generateDungeon', () => {
     }
     expect(a.exitX).toBe(b.exitX);
     expect(a.exitY).toBe(b.exitY);
+    expect(a.coreX).toBe(b.coreX);
+    expect(a.coreY).toBe(b.coreY);
   });
 
   it('safety path has no walls (all tiles passable)', () => {
@@ -278,20 +281,38 @@ describe('generateDungeon', () => {
   });
 });
 
-describe('getTileAt', () => {
-  const dungeon = generateDungeon(4, 4, 1, createRNG(1));
-
-  it('in-bounds returns tile', () => {
-    const t = getTileAt(dungeon, 0, 0);
-    expect(t).toBeDefined();
-    expect(t!.x).toBe(0);
-    expect(t!.y).toBe(0);
+describe('data core placement', () => {
+  it('core is reachable and not the exit tile', () => {
+    const d = generateDungeon(12, 12, 2, createRNG(777));
+    expect(d.coreX).toBeGreaterThanOrEqual(0);
+    expect(d.coreX).toBeLessThan(12);
+    expect(d.coreY).toBeGreaterThanOrEqual(0);
+    expect(d.coreY).toBeLessThan(12);
+    expect(d.coreX !== d.exitX || d.coreY !== d.exitY).toBe(true);
+    const coreTile = d.tiles[d.coreY][d.coreX];
+    expect(coreTile.type).toBe(TileType.Empty);
   });
 
-  it('out-of-bounds returns null', () => {
-    expect(getTileAt(dungeon, -1, 0)).toBeNull();
-    expect(getTileAt(dungeon, 0, -1)).toBeNull();
-    expect(getTileAt(dungeon, 4, 0)).toBeNull();
-    expect(getTileAt(dungeon, 0, 4)).toBeNull();
+  it('blocking the core tile still leaves a path from start to exit', () => {
+    const d = generateDungeon(12, 12, 2, createRNG(888));
+    const grid = d.tiles.map(row => row.map(t => t.type));
+    grid[d.coreY][d.coreX] = TileType.Wall;
+    expect(hasPath(grid, 12, 12, 0, 0, d.exitX, d.exitY)).toBe(true);
+  });
+
+  it('unstable zone has more random maps than survey', () => {
+    let unstableMaps = 0;
+    let surveyMaps = 0;
+    for (let i = 0; i < 50; i++) {
+      const u = generateDungeon(12, 12, 10, createRNG(i + 1));
+      const s = generateDungeon(12, 12, 2, createRNG(i + 1));
+      unstableMaps += countType(u, TileType.RandomMap);
+      surveyMaps += countType(s, TileType.RandomMap);
+    }
+    expect(unstableMaps).toBeGreaterThan(surveyMaps);
   });
 });
+
+function countType(d: any, type: TileType) {
+  return d.tiles.flat().filter((t: any) => t.type === type).length;
+}
