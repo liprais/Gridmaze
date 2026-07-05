@@ -9,9 +9,11 @@ import type { EngineState } from '../game/engine';
 
 /** Helper: create a minimal test dungeon */
 function makeTestDungeon(overrides?: Partial<{
-  tiles: Partial<{ type: TileType; steppedOn: boolean; explored: boolean; label: string }>[][];
+  tiles: Partial<{ type: TileType; steppedOn: boolean; explored: boolean; label: string; consumed: boolean }>[][];
   exitX: number;
   exitY: number;
+  coreX: number;
+  coreY: number;
   width: number;
   height: number;
 }>): DungeonData {
@@ -25,6 +27,7 @@ function makeTestDungeon(overrides?: Partial<{
       label: '',
       explored: false,
       steppedOn: false,
+      consumed: false,
     })),
   );
   // Apply per-tile overrides
@@ -42,6 +45,8 @@ function makeTestDungeon(overrides?: Partial<{
     height: h,
     exitX: overrides?.exitX ?? (w - 1),
     exitY: overrides?.exitY ?? (h - 1),
+    coreX: overrides?.coreX ?? -1,
+    coreY: overrides?.coreY ?? -1,
     tiles,
   };
 }
@@ -52,8 +57,15 @@ function makeState(overrides?: Partial<EngineState>): EngineState {
     playerY: 0,
     floor: 1,
     hasShield: false,
+    stability: 3,
+    coresThisChapter: 0,
+    totalCores: 0,
+    relics: [],
+    resetsThisChapter: 0,
+    coreCollectedThisFloor: false,
     dungeon: makeTestDungeon(),
     gameWon: false,
+    chapterFailed: false,
     ...overrides,
   };
 }
@@ -161,7 +173,7 @@ describe('Exit tile', () => {
         [{}, {}, {}],
         [{}, {}, { type: TileType.Exit }],
       ],
-      width: 3, height: 3, exitX: 2, exitY: 2,
+      width: 3, height: 3, exitX: 2, exitY: 2, coreX: 1, coreY: 1,
     });
     const state = makeState({ dungeon, playerX: 1, playerY: 2, floor: 5 });
     const rng = createRNG(42);
@@ -183,7 +195,7 @@ describe('Exit tile', () => {
       tiles: [
         [{}, { type: TileType.Exit }],
       ],
-      width: 2, height: 1, exitX: 1, exitY: 0,
+      width: 2, height: 1, exitX: 1, exitY: 0, coreX: 0, coreY: 0,
     });
     const state = makeState({ dungeon, playerX: 0, playerY: 0, floor: 99 });
     const rng = createRNG(42);
