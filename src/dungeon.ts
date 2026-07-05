@@ -258,6 +258,27 @@ export function showLabel(
   meshes.labelSprites[y][x] = sprite;
 }
 
+/**
+ * Reveal the entire floor: strip fog, mark every tile explored, and set true
+ * color + label sprite. Used by the Scan tile — without this the player still
+ * sees fog covering tiles whose color/label were "revealed" by revealTile.
+ */
+export function revealAll(
+  fogMeshes: THREE.Mesh[][],
+  dungeon: DungeonData,
+  meshes: DungeonMeshes,
+): void {
+  for (let y = 0; y < dungeon.height; y++) {
+    for (let x = 0; x < dungeon.width; x++) {
+      const tile = dungeon.tiles[y][x];
+      tile.explored = true;
+      fogMeshes[y][x].visible = false;
+      // revealTile is a no-op if already steppedOn; safe to call unconditionally.
+      revealTile(dungeon, meshes, x, y);
+    }
+  }
+}
+
 export function revealAround(
   fogMeshes: THREE.Mesh[][],
   dungeon: DungeonData,

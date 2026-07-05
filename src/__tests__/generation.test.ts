@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { TileType } from '../types';
 import { createRNG } from '../game/rng';
 import { CONFIG } from '../game/config';
@@ -8,6 +8,7 @@ import {
   getTileAt,
   randomTileType,
   randomTileTypeWithWeights,
+  setLabelProvider,
   tileLabel,
   isPassable,
 } from '../game/generation';
@@ -109,6 +110,9 @@ describe('randomTileType', () => {
 });
 
 describe('tileLabel', () => {
+  // Reset module-level provider after each test so the global hook doesn't leak.
+  afterEach(() => setLabelProvider(null));
+
   it('special tiles have labels', () => {
     const rng = createRNG(1);
     expect(tileLabel(TileType.Reset, rng)).toBeTruthy();
@@ -120,6 +124,8 @@ describe('tileLabel', () => {
     const rng = createRNG(1);
     expect(tileLabel(TileType.Start, rng)).toBe('');
     expect(tileLabel(TileType.Wall, rng)).toBe('');
+    // Exit label is set by generateDungeon (not tileLabel), so it falls back
+    // to the built-in English default here.
     expect(tileLabel(TileType.Exit, rng)).toBe('');
   });
 
@@ -128,6 +134,41 @@ describe('tileLabel', () => {
     for (let i = 0; i < 100; i++) {
       expect(tileLabel(TileType.Empty, rng)).toBe('');
     }
+  });
+
+  it('labelProvider overrides built-in English labels', () => {
+    setLabelProvider((t: TileType) => `X${t}`);
+    expect(tileLabel(TileType.Reset, createRNG(1))).toBe('X1');
+    expect(tileLabel(TileType.Teleport, createRNG(1))).toBe('X2');
+    expect(tileLabel(TileType.Shield, createRNG(1))).toBe('X6');
+    // Empty still returns '' (handled before the provider)
+    expect(tileLabel(TileType.Empty, createRNG(1))).toBe('');
+  });
+});
+
+describe('generateDungeon label provider', () => {
+  afterEach(() => setLabelProvider(null));
+
+  it('uses provider for special-tile labels when set', () => {
+    setLabelProvider((t: TileType) => `Z${t}`);
+    const d = generateDungeon(8, 8, 1, createRNG(11));
+    for (let y = 0; y < d.height; y++) {
+      for (let x = 0; x < d.width; x++) {
+        const tile = d.tiles[y][x];
+        if (tile.type >= 1 && tile.type <= 6) {
+          expect(tile.label).toBe(`Z${tile.type}`);
+        } else if (tile.type === TileType.Exit) {
+          expect(tile.label).toBe(`Z${TileType.Exit}`);
+        }
+      }
+    }
+  });
+
+  it('falls back to English when no provider installed', () => {
+    // No setLabelProvider call → EN_LABELS
+    const d = generateDungeon(8, 8, 1, createRNG(11));
+    const resetTile = d.tiles.flat().find(t => t.type === TileType.Reset);
+    expect(resetTile?.label).toBeTruthy();
   });
 });
 

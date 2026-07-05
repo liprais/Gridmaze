@@ -167,9 +167,11 @@ describe('Exit tile', () => {
     const rng = createRNG(42);
     const result = processMove(state, 1, 0, rng);
 
-    expect(result.events[0].kind).toBe('move');
-    expect(result.events[1].kind).toBe('exit_reached');
-    expect(result.events[1]).toMatchObject({ floorCleared: false, newFloor: 6 });
+    // No move event for Exit — the old exit coords would point at arbitrary
+    // tiles on the NEW dungeon and pollute its exploration state.
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0].kind).toBe('exit_reached');
+    expect(result.events[0]).toMatchObject({ floorCleared: false, newFloor: 6 });
     expect(result.state.floor).toBe(6);
     expect(result.state.playerX).toBe(0);
     expect(result.state.playerY).toBe(0);
@@ -187,9 +189,10 @@ describe('Exit tile', () => {
     const rng = createRNG(42);
     const result = processMove(state, 1, 0, rng);
 
-    expect(result.events[1].kind).toBe('exit_reached');
-    expect(result.events[1]).toMatchObject({ floorCleared: true });
-    expect(result.events[2]?.kind).toBe('victory');
+    expect(result.events).toHaveLength(2);
+    expect(result.events[0].kind).toBe('exit_reached');
+    expect(result.events[0]).toMatchObject({ floorCleared: true });
+    expect(result.events[1]?.kind).toBe('victory');
     expect(result.state.gameWon).toBe(true);
   });
 });

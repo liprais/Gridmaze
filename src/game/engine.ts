@@ -91,7 +91,13 @@ export function processMove(
   const tileType = tile.type;
 
   // ── Exit ──
+  // The move event pushed above carries the OLD floor's exit coords. Once we
+  // regenerate the dungeon below, those coords would point at arbitrary (and
+  // potentially wrong) tiles on the NEW floor — main.ts would "reveal" them,
+  // polluting the fresh map. Drop the move event; exit_reached/victory own the
+  // transition, and regenerateDungeonMesh places the player at (0,0).
   if (tileType === TileType.Exit) {
+    events.length = 0;
     if (next.floor >= CONFIG.dungeon.maxFloor) {
       next.gameWon = true;
       events.push({ kind: 'exit_reached', floorCleared: true, newFloor: CONFIG.dungeon.maxFloor });

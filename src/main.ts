@@ -1,17 +1,22 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TileType } from './types';
-import { createDungeonMesh, createFogOverlay, revealAround, revealTile, tileToWorld, disposeDungeonMeshes, disposeFogOverlay, rebuildAllLabels } from './dungeon';
+import { createDungeonMesh, createFogOverlay, revealAround, revealTile, revealAll, tileToWorld, disposeDungeonMeshes, disposeFogOverlay, rebuildAllLabels } from './dungeon';
 import type { DungeonMeshes } from './dungeon';
 import { Player, PLAYER_Y } from './player';
-import { init as initI18n, setLang, getLang, t, getTileName, getProximityMessage, refreshTileLabels } from './i18n';
+import { init as initI18n, setLang, getLang, t, getTileLabel, getTileName, getProximityMessage, refreshTileLabels } from './i18n';
 import { CONFIG } from './game/config';
 import { createRNG } from './game/rng';
 import { createInitialState, processMove } from './game/engine';
+import { setLabelProvider } from './game/generation';
 import type { EngineState, GameEvent } from './game/engine';
 
 // ── i18n — must init before any dungeon generation (labels depend on language) ─
 initI18n();
+
+// Inject i18n's label provider so generateDungeon emits language-appropriate
+// symbols on first paint (was hardcoded English until the user toggled lang).
+setLabelProvider(getTileLabel);
 
 // ── RNG — seedable for reproducibility ─────────────────────────────
 const rng = createRNG(Date.now());
@@ -260,12 +265,9 @@ function dispatchEvent(event: GameEvent) {
       break;
 
     case 'scan_revealed':
-      // Reveal true colors for ALL tiles on the floor
-      for (let sy = 0; sy < gameState.dungeon.height; sy++) {
-        for (let sx = 0; sx < gameState.dungeon.width; sx++) {
-          revealTile(gameState.dungeon, dungeonMeshes, sx, sy);
-        }
-      }
+      // Strip fog AND reveal colors for every tile — previously only colors
+      // changed, leaving the fog layer covering the floor.
+      revealAll(fogData.meshes, gameState.dungeon, dungeonMeshes);
       spawnExitBeacon();
       addLog('▌ ' + t('log.scanned'));
       break;

@@ -13,6 +13,15 @@ const EN_LABELS: Record<number, string> = {
   [TileType.Shield]:    '◈',
 };
 
+// i18n hook: main.ts injects a label provider (e.g. i18n.getTileLabel) so
+// freshly-generated dungeons carry the active language's symbols. Falls back to
+// EN_LABELS when no provider is installed (tests, server-side rendering).
+let labelProvider: ((type: TileType) => string) | null = null;
+
+export function setLabelProvider(fn: ((type: TileType) => string) | null): void {
+  labelProvider = fn;
+}
+
 // ── Path / passability ─────────────────────────────────────────────
 
 export function isPassable(type: TileType): boolean {
@@ -74,6 +83,7 @@ export function randomTileType(floor: number, rng: RNG): TileType {
 /** Generate a label for a tile, using English characters (no i18n dependency). */
 export function tileLabel(type: TileType, rng: RNG): string {
   if (type === TileType.Empty) return '';
+  if (labelProvider) return labelProvider(type);
   return EN_LABELS[type] ?? '';
 }
 
@@ -160,7 +170,8 @@ function tryGenerate(
   tiles[sy][sx].type = TileType.Start;
   tiles[sy][sx].label = '';
   tiles[ey][ex].type = TileType.Exit;
-  tiles[ey][ex].label = 'EX';
+  // Exit label is also language-aware: 'EX' for English, '出' for Chinese.
+  tiles[ey][ex].label = labelProvider ? labelProvider(TileType.Exit) : 'EX';
 
   // Safety check: start must reach exit
   if (!hasPath(tiles.map(r => r.map(t => t.type)), width, height, sx, sy, ex, ey)) {
