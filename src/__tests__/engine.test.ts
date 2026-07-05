@@ -439,6 +439,69 @@ describe('Event ordering', () => {
   });
 });
 
+describe('stability', () => {
+  it('reset without shield costs 1 stability', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.Reset }]], width: 2, height: 1 });
+    const state = makeState({ dungeon, stability: 3 });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(2);
+    expect(result.events.some(e => e.kind === 'stability_lost')).toBe(true);
+  });
+
+  it('teleport without shield costs 1 stability', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.Teleport }, {}]], width: 3, height: 1 });
+    const state = makeState({ dungeon, stability: 2 });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(1);
+  });
+
+  it('random map does not cost stability', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.RandomMap }]], width: 2, height: 1 });
+    const state = makeState({ dungeon, stability: 2 });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(2);
+  });
+
+  it('shield absorbs hazard without losing stability', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.Reset }]], width: 2, height: 1 });
+    const state = makeState({ dungeon, stability: 1, hasShield: true });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(1);
+    expect(result.state.hasShield).toBe(false);
+  });
+
+  it('stability reaching 0 triggers chapter_failed', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, { type: TileType.Reset }]], width: 2, height: 1 });
+    const state = makeState({ dungeon, stability: 1 });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.stability).toBe(0);
+    expect(result.state.chapterFailed).toBe(true);
+    expect(result.events.some(e => e.kind === 'chapter_failed')).toBe(true);
+  });
+});
+
+describe('data core', () => {
+  it('collecting core increments counters and emits event', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, {}]], width: 2, height: 1, exitX: 0, exitY: 0, coreX: 1, coreY: 0 });
+    const state = makeState({ dungeon, playerX: 0, playerY: 0, coresThisChapter: 1, totalCores: 5 });
+    const result = processMove(state, 1, 0, createRNG(1));
+    expect(result.state.coresThisChapter).toBe(2);
+    expect(result.state.totalCores).toBe(6);
+    expect(result.state.coreCollectedThisFloor).toBe(true);
+    expect(result.events.some(e => e.kind === 'core_collected')).toBe(true);
+  });
+
+  it('core collection stops after first pickup on a floor', () => {
+    const dungeon = makeTestDungeon({ tiles: [[{}, {}]], width: 2, height: 1, exitX: 0, exitY: 0, coreX: 1, coreY: 0 });
+    const state = makeState({ dungeon, playerX: 0, playerY: 0, coresThisChapter: 1, totalCores: 5 });
+    const afterFirst = processMove(state, 1, 0, createRNG(1));
+    const afterSecond = processMove(afterFirst.state, -1, 0, createRNG(1));
+    const afterThird = processMove(afterSecond.state, 1, 0, createRNG(1));
+    expect(afterThird.state.coresThisChapter).toBe(2);
+    expect(afterThird.state.totalCores).toBe(6);
+  });
+});
+
 // ── Determinism ──────────────────────────────────────────────────────
 
 describe('Deterministic behavior', () => {
