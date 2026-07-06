@@ -196,6 +196,15 @@ describe('generateDungeon', () => {
     expect(d.tiles[d.exitY][d.exitX].type).toBe(TileType.Exit);
   });
 
+  it('exit is not fixed to one corner', () => {
+    const positions = new Set<string>();
+    for (let i = 0; i < 50; i++) {
+      const d = generateDungeon(12, 12, 1, createRNG(i + 1));
+      positions.add(`${d.exitX},${d.exitY}`);
+    }
+    expect(positions.size).toBeGreaterThan(4);
+  });
+
   it('start always reaches exit', () => {
     const rng = createRNG(42);
     for (let floor = 1; floor <= 99; floor += 10) {

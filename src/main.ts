@@ -257,6 +257,12 @@ window.addEventListener('keydown', (e) => {
   dismissChapterFailedOverlay();
 });
 
+// Allow touch devices to dismiss the chapter-failed overlay by tapping it.
+chapterFailedOverlay.addEventListener('click', () => {
+  if (!isChapterFailedOverlayVisible()) return;
+  dismissChapterFailedOverlay();
+});
+
 function showRelicChoice(event: Extract<GameEvent, { kind: 'relic_choice' }>) {
   relicCards.innerHTML = '';
   for (const relic of event.options) {
@@ -738,15 +744,19 @@ function regenerateDungeonMesh() {
 }
 
 // ── Mobile touch controls ────────────────────────────────────
+// Attach to the canvas, not window, so UI buttons (restart, language toggle,
+// relic choice) receive their own touch/click events without being swallowed
+// by the swipe gesture logic.
 let touchStartX = 0, touchStartY = 0;
-window.addEventListener('touchstart', (e) => {
+renderer.domElement.addEventListener('touchstart', (e) => {
   touchStartX = e.touches[0].clientX;
   touchStartY = e.touches[0].clientY;
 });
-window.addEventListener('touchend', (e) => {
+renderer.domElement.addEventListener('touchend', (e) => {
   const dx = e.changedTouches[0].clientX - touchStartX;
   const dy = e.changedTouches[0].clientY - touchStartY;
   if (Math.abs(dx) < 20 && Math.abs(dy) < 20) return;
+  e.preventDefault();
   if (Math.abs(dx) > Math.abs(dy)) {
     keys.add(dx > 0 ? 'd' : 'a');
     setTimeout(() => keys.delete(dx > 0 ? 'd' : 'a'), 50);

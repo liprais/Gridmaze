@@ -118,8 +118,13 @@ function tryGenerate(
   rng: RNG,
 ): DungeonData | null {
   const sx = 0, sy = 0;
-  const ex = width - 2 + rng.nextInt(2);
-  const ey = height - 2 + rng.nextInt(2);
+  let ex = rng.nextInt(width);
+  let ey = rng.nextInt(height);
+  // Don't place the exit on the start tile; the safety path check below will
+  // retry if the random exit happens to be unreachable.
+  if (ex === sx && ey === sy) {
+    ex = (ex + 1) % width;
+  }
 
   // Step 1: carve a guaranteed passable path from start to exit
   const safe = new Uint8Array(width * height);
